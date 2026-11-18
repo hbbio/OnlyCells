@@ -24,7 +24,7 @@ function App() {
 mount("#app", App);
 ```
 
-TSX compiles through Vite into calls to `@nodiffjs/core/jsx-runtime`. Those calls create real DOM nodes (like Svelte). Stores decide when small regions update. Data enters the app through zod schemas. Cache entries carry expiry. Auth is just a bearer header helper over an app-owned token.
+TSX compiles through Bun into calls to `@nodiffjs/core/jsx-runtime`. Those calls create real DOM nodes (like Svelte). Stores decide when small regions update. Data enters the app through zod schemas. Cache entries carry expiry. Auth is just a bearer header helper over an app-owned token.
 
 This repo contains both the framework package and a demo app.
 
@@ -39,9 +39,9 @@ nodiff/
 NoDiff is meant to be forked as a monorepo. The cleanest development loop is to edit the
 framework package and the app together, then keep the pieces that fit the app you are building.
 
-The demo app intentionally consumes `packages/nodiff/src` through Vite and TypeScript aliases for
-`@nodiffjs/core`. That keeps HMR and editor navigation on source files while you change the runtime,
-bindings, router, API client, and app code in one workspace.
+The demo app consumes `packages/nodiff/src` through TypeScript path aliases shared by Bun and
+`tsc`. The dev server and editor use the source files as you change the runtime, bindings, router,
+API client, and app code in one workspace.
 
 The package build is still kept clean. `packages/nodiff` emits `dist`, declares package exports, uses
 publishable dependency ranges, and ships package-local README/LICENSE files. Treat that artifact as a
@@ -138,25 +138,25 @@ You can read the code for those pieces in a few files.
 | Router         | hash or history mode, route params, query params, active links                   |
 | Forms          | zod-backed submit action, native validity messages                               |
 | Security       | DOM sink hardening, strict request policy, CSRF helpers, safe error fallbacks    |
-| Tooling        | Bun workspaces, Vite 8, TypeScript 7 native preview, oxlint, oxfmt               |
+| Tooling        | Bun workspaces, built-in dev server, bundler, formatter, and TypeScript 7        |
 
 ## Run it
 
-Prerequisite: Bun.
+Install Bun 1.4.4 or later and TypeScript 7. Make `bun` and `tsc` available on your `PATH`.
 
 ```sh
-bun install
+bun install --frozen-lockfile
 bun run dev
 ```
 
-Open the local Vite URL printed in the terminal.
+Open the local URL printed by Bun.
 
 Useful commands:
 
 ```sh
 bun run typecheck
-bun run lint
 bun run format
+bun run format:check
 bun run check
 bun run security:check
 bun run build
@@ -164,21 +164,20 @@ bun run build
 
 The root scripts run the framework package first, then the demo app where that ordering matters.
 
-During `bun run dev`, the demo resolves `@nodiffjs/core` to `packages/nodiff/src` instead of `dist`.
-This is deliberate: framework edits and app edits should update together in the fork.
+The production build writes the demo bundle and deployment headers to `apps/demo/dist`. After
+building, run `bun run --cwd apps/demo preview` to serve that output locally. Refresh the browser
+after a rebuild to see the latest output.
 
 ## Current toolchain
 
 The repo is intentionally modern:
 
-- Bun workspaces with dependency versions centralized in the root catalog
-- Vite 8 for the demo app
-- TypeScript 7 native preview through `@typescript/native-preview` and `tsgo`
-- oxlint with type-aware linting through `oxlint-tsgolint`
-- oxfmt for formatting
-- ES2022 browser target
+- Bun workspaces with Bun's HTML dev server, bundler, formatter, and test runner
+- System-installed TypeScript 7 for typechecking and library emission
+- Native CSS for the demo layout and themes
+- ES2022 TypeScript target and a modern browser bundle
 
-`bun run check` runs strict typechecking, type-aware linting, format checking, and tests.
+`bun run check` runs strict typechecking, format checking, and tests.
 `bun run security:check` adds the dependency audit and production build on top.
 
 ## Security defaults
@@ -1067,7 +1066,7 @@ packages/nodiff/src/
   errors.ts           redacted error messages for UI fallbacks
   forms.ts            zod form action and validity helpers
   index.ts            public exports
-  jsx-dev-runtime.ts  Vite/dev automatic JSX runtime entry
+  jsx-dev-runtime.ts  Development automatic JSX runtime entry
   jsx-runtime.ts      TypeScript automatic JSX runtime entry
   lifecycle.ts        cleanup registry
   resource.ts         async resource store
@@ -1091,7 +1090,7 @@ The repo targets modern browsers only:
 }
 ```
 
-The demo Vite build target is also `es2022`.
+The demo uses Bun's browser bundler and native CSS features such as `light-dark()`.
 
 ## Publishing notes
 
@@ -1124,7 +1123,7 @@ The demo Vite build target is also `es2022`.
 }
 ```
 
-The package source keeps extensionless local imports for the monorepo development path. The package
-build rewrites only the emitted `dist` specifiers so standard ESM consumers can import the packed
-artifact directly. Package metadata avoids workspace-only dependency protocols, so `npm pack` output
-can be installed outside this workspace.
+The package source imports local TypeScript files by their `.ts` paths. TypeScript rewrites those
+paths to `.js` in the emitted JavaScript so standard ESM consumers can import the package directly.
+The packed package includes declarations and uses standard dependency ranges for installs outside
+the workspace.

@@ -1,15 +1,13 @@
 import { view } from "@nodiffjs/core";
-import { Badge, PageHeader, SectionTitle } from "../components";
+import { PageHeader, SectionTitle, StatusMetric } from "../components";
 import { apiCache, appCache, auth, cacheInspector, refreshCacheInspector } from "../state";
 
 function CacheActions() {
   return (
-    <div class="join">
-      <button class="btn btn-outline join-item" onClick={refreshCacheInspector}>
-        Refresh list
-      </button>
+    <div class="button-group">
+      <button onClick={refreshCacheInspector}>Refresh list</button>
       <button
-        class="btn btn-primary join-item"
+        class="button-primary"
         onClick={() => {
           appCache.clear();
           auth.logout();
@@ -24,7 +22,7 @@ function CacheActions() {
 
 export function CachePage() {
   return (
-    <section class="grid gap-5">
+    <section class="page">
       <PageHeader title="Inspectable cache state." actions={<CacheActions />}>
         Preferences and HTTP snapshots share the same tiny cache format with expiry, tags, stale
         reads, and zod validation at read time.
@@ -37,23 +35,17 @@ export function CachePage() {
           const appKeys = appCache.keys();
           const httpKeys = apiCache.keys();
           return (
-            <section class="stats stats-vertical bg-base-100 shadow-sm md:stats-horizontal">
-              <div class="stat">
-                <div class="flex items-start justify-between gap-3">
-                  <div class="stat-title">App cache</div>
-                  <Badge>{appKeys.length}</Badge>
-                </div>
-                <div class="stat-value text-3xl">{appKeys.length}</div>
-                <div class="stat-desc">Preferences snapshots.</div>
-              </div>
-              <div class="stat">
-                <div class="flex items-start justify-between gap-3">
-                  <div class="stat-title">HTTP cache</div>
-                  <Badge>{httpKeys.length}</Badge>
-                </div>
-                <div class="stat-value text-3xl">{httpKeys.length}</div>
-                <div class="stat-desc">GET response envelopes with tags and TTL.</div>
-              </div>
+            <section class="panel metrics">
+              <StatusMetric
+                label="App cache"
+                value={appKeys.length}
+                hint="Preferences snapshots."
+              />
+              <StatusMetric
+                label="HTTP cache"
+                value={httpKeys.length}
+                hint="GET response envelopes with tags and TTL."
+              />
             </section>
           );
         },
@@ -68,29 +60,26 @@ export function CachePage() {
         (state) => state.version,
         () => {
           const keys = appCache.keys().sort();
-          if (keys.length === 0) return <p class="alert alert-info">No demo cache keys.</p>;
+          if (keys.length === 0) return <p class="notice">No demo cache keys.</p>;
 
           return (
-            <section class="card card-border bg-base-100 shadow-sm">
-              <div class="card-body gap-4">
-                <h2 class="card-title">Keys</h2>
-                <ul class="list rounded-box border border-base-300 bg-base-100">
-                  {keys.map((key) => (
-                    <li class="list-row items-center">
-                      <code class="text-sm">demo:{key}</code>
-                      <button
-                        class="btn btn-ghost btn-xs"
-                        onClick={() => {
-                          appCache.remove(key);
-                          refreshCacheInspector();
-                        }}
-                      >
-                        remove
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+            <section class="panel">
+              <ul class="cache-keys">
+                {keys.map((key) => (
+                  <li>
+                    <code>demo:{key}</code>
+                    <button
+                      class="button-quiet"
+                      onClick={() => {
+                        appCache.remove(key);
+                        refreshCacheInspector();
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </section>
           );
         },

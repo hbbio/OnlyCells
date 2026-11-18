@@ -11,7 +11,7 @@ import { auth, postsVm } from "../state";
 
 export function HomePage() {
   return (
-    <section class="grid gap-5">
+    <section class="page">
       <PageHeader hero title="TSX as browser syntax.">
         A lean rich-client framework that lives with your app: real DOM nodes, explicit store
         subscriptions, zod-checked data, cache, auth, forms, and routing without React, axios, a
@@ -23,16 +23,16 @@ export function HomePage() {
         replay behind these updates.
       </SectionTitle>
 
-      <div class="grid gap-4 xl:grid-cols-[minmax(18rem,1fr)_minmax(22rem,1.4fr)_minmax(16rem,1fr)]">
+      <div class="home-panels">
         <CounterCard />
-        <section class="stats stats-vertical bg-base-100 shadow-sm md:stats-horizontal">
+        <section class="panel metrics">
           <StatusMetric
             label="Auth"
             value={text(auth.store, (state) => state.status)}
             badge={text(auth.store, (state) => (state.token ? "token" : "guest"))}
             hint="Bearer-token helper"
             use={bind.classes(auth.store, (state) => ({
-              "text-success": state.status === "authenticated",
+              "tone-success": state.status === "authenticated",
             }))}
           />
           <StatusMetric
@@ -44,7 +44,7 @@ export function HomePage() {
             )}
             use={bind.props(postsVm, (state) => ({
               title: `${state.total} parsed posts in memory`,
-              class: { "text-warning": state.loading },
+              class: { "tone-warning": state.loading },
             }))}
           />
         </section>
@@ -55,7 +55,7 @@ export function HomePage() {
         The demo keeps the framework surface visible instead of hiding it behind app-specific
         wrappers.
       </SectionTitle>
-      <section class="grid gap-4 md:grid-cols-2">
+      <section class="feature-panels">
         <FeatureList
           title="Framework surface"
           items={[

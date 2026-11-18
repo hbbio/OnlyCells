@@ -1,6 +1,6 @@
 import type { z } from "zod";
-import { CsrfError, csrfFieldName, readCsrfToken, type CsrfFormOptions } from "./csrf";
-import type { Action } from "./dom";
+import { CsrfError, csrfFieldName, readCsrfToken, type CsrfFormOptions } from "./csrf.ts";
+import type { Action } from "./dom.ts";
 
 export type FormValues = Record<string, FormDataEntryValue | FormDataEntryValue[]>;
 

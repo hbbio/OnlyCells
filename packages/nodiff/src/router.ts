@@ -1,8 +1,8 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
-import { type Action, type Child, type ElementProps, jsx } from "./dom";
-import { safeErrorMessage, toError } from "./errors";
-import { getSecurityPolicy } from "./security";
-import { subscribeSelector, view } from "./store";
+import { type Action, type Child, type ElementProps, jsx } from "./dom.ts";
+import { safeErrorMessage, toError } from "./errors.ts";
+import { getSecurityPolicy } from "./security.ts";
+import { subscribeSelector, view } from "./store.ts";
 
 export type RouteContext<TMeta = unknown> = {
   path: string;

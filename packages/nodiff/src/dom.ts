@@ -1,6 +1,6 @@
-import { addCleanup, cleanupNode, replaceChildrenClean } from "./lifecycle";
-import { safeErrorMessage, toError } from "./errors";
-import { getSecurityPolicy } from "./security";
+import { addCleanup, cleanupNode, replaceChildrenClean } from "./lifecycle.ts";
+import { safeErrorMessage, toError } from "./errors.ts";
+import { getSecurityPolicy } from "./security.ts";
 
 export type PrimitiveChild = string | number | bigint | boolean | null | undefined;
 export type Child = PrimitiveChild | Node | Child[] | Iterable<Child>;
@@ -33,24 +33,16 @@ export type TrustedHTML = {
 };
 
 export type StyleValue =
-  | string
-  | Partial<CSSStyleDeclaration>
-  | Record<string, string | number | null | undefined>;
+  string | Partial<CSSStyleDeclaration> | Record<string, string | number | null | undefined>;
 
 export type ClassValue =
-  | string
-  | string[]
-  | Record<string, boolean | undefined | null>
-  | false
-  | null
-  | undefined;
+  string | string[] | Record<string, boolean | undefined | null> | false | null | undefined;
 export type AttributeValue = string | number | boolean | null | undefined;
 export type EventHandler<T extends Element, TEvent extends Event> = (
   event: TEvent & { currentTarget: T },
 ) => void;
 export type EventProp<T extends Element, TEvent extends Event> =
-  | EventHandler<T, TEvent>
-  | [EventHandler<T, TEvent>, AddEventListenerOptions?];
+  EventHandler<T, TEvent> | [EventHandler<T, TEvent>, AddEventListenerOptions?];
 
 type EmptyPropValue = false | null | undefined;
 type ElementPropertyValue<TValue> =
@@ -76,13 +68,15 @@ type ReservedElementProp =
   | "use"
   | `on${string}`;
 type ElementPropertyProps<T extends Element, TExcluded extends string = never> = {
-  [K in keyof T as K extends string
-    ? K extends ReservedElementProp | TExcluded
-      ? never
-      : T[K] extends (...args: unknown[]) => unknown
+  [
+    K in keyof T as K extends string
+      ? K extends ReservedElementProp | TExcluded
         ? never
-        : K
-    : never]?: ElementPropertyValue<T[K]>;
+        : T[K] extends (...args: unknown[]) => unknown
+          ? never
+          : K
+      : never
+  ]?: ElementPropertyValue<T[K]>;
 };
 type DataAriaAttributes = {
   [K in `data-${string}`]?: AttributeValue;

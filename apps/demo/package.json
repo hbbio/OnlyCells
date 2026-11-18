@@ -6,22 +6,17 @@
   "author": "Henri Binsztok",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "typecheck": "tsgo -p tsconfig.json --noEmit"
+    "dev": "bun ./index.html --host=127.0.0.1",
+    "build": "bun ./build.ts",
+    "preview": "bun ./preview.ts",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@nodiffjs/core": "workspace:*",
-    "zod": "catalog:",
-    "zustand": "catalog:"
+    "zod": "^4.6.7",
+    "zustand": "^5.1.0"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "catalog:",
-    "@types/node": "catalog:",
-    "@typescript/native-preview": "catalog:",
-    "daisyui": "catalog:",
-    "tailwindcss": "catalog:",
-    "vite": "catalog:"
+    "@types/bun": "1.4.4"
   }
 }

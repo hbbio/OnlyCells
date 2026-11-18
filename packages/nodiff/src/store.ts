@@ -1,12 +1,12 @@
-import { addCleanup, clearBetween, removeNode } from "./lifecycle";
+import { addCleanup, clearBetween, removeNode } from "./lifecycle.ts";
 import {
   assertSafeCssValue,
   type Action,
   type Child,
   toNodes,
   validateAttributeValue,
-} from "./dom";
-import type { ResourceState } from "./resource";
+} from "./dom.ts";
+import type { ResourceState } from "./resource.ts";
 
 export type Equality<T> = (a: T, b: T) => boolean;
 

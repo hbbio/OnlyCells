@@ -2,7 +2,7 @@
 
 NoDiff is a small TypeScript package for rich-client apps that use TSX as browser syntax. It creates real DOM nodes, keeps updates explicit through store bindings, and includes helpers for zod-checked API data, localStorage caching, token auth, forms, routing, and security defaults.
 
-This package is designed for a fork-first monorepo workflow. In this repository, the demo app aliases `@nodiffjs/core` directly to `packages/nodiff/src`, so framework and app edits update together during Vite development. The package build still emits a clean `dist` artifact for consumers, fixtures, and optional publishing.
+This package is designed for a fork-first monorepo workflow. In this repository, the demo app aliases `@nodiffjs/core` directly to `packages/nodiff/src`, so Bun picks up framework and app edits together. The package build emits a `dist` artifact for consumers, fixtures, and optional publishing.
 
 ## TSX Setup
 
@@ -51,19 +51,18 @@ Automatic JSX runtime entries are exported at `@nodiffjs/core/jsx-runtime` and `
 
 ## Local Development
 
-From the repository root:
+With Bun 1.4.4 or later and TypeScript 7 on your `PATH`, run these commands from the repository root.
 
 ```sh
-bun install
+bun install --frozen-lockfile
 bun run dev
 ```
 
-The demo consumes source through Vite aliases. Edit `packages/nodiff/src` and `apps/demo/src` together; HMR stays on the TypeScript source path.
+The demo consumes source through the path aliases in `apps/demo/tsconfig.json`. Edit
+`packages/nodiff/src` and `apps/demo/src` together while the Bun dev server is running.
 
-For package verification:
+From `packages/nodiff`, verify the package contents with Bun. The pack command builds the package.
 
 ```sh
-bun run build
-cd packages/nodiff
-npm --cache /private/tmp/npm-cache pack --dry-run
+bun pm pack --dry-run
 ```

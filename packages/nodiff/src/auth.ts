@@ -1,6 +1,6 @@
 import { createStore } from "zustand/vanilla";
 import { z } from "zod";
-import { createLocalCache } from "./cache";
+import { createLocalCache } from "./cache.ts";
 
 export type AuthToken = {
   accessToken: string;
