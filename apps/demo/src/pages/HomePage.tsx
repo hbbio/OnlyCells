@@ -14,8 +14,8 @@ export function HomePage() {
     <section class="page">
       <PageHeader hero title="TSX as browser syntax.">
         A lean rich-client framework that lives with your app: real DOM nodes, explicit store
-        subscriptions, zod-checked data, cache, auth, forms, and routing without React, axios, a
-        virtual DOM, or a scheduler.
+        subscriptions, validated data, cache, auth, forms, and routing without React, axios, or a
+        virtual DOM.
       </PageHeader>
 
       <SectionTitle title="Live app surface">
@@ -40,7 +40,7 @@ export function HomePage() {
             value={text(postsVm, (state) => state.total)}
             badge={text(postsVm, (state) => (state.loading ? "loading" : state.status))}
             hint={text(postsVm, (state) =>
-              state.stale ? "Stale cache visible while refreshing" : "Zod-validated API data",
+              state.stale ? "Stale cache visible while refreshing" : "Validated API data",
             )}
             use={bind.props(postsVm, (state) => ({
               title: `${state.total} parsed posts in memory`,
@@ -68,7 +68,7 @@ export function HomePage() {
         <FeatureList
           title="Data surface"
           items={[
-            "Zod response validation",
+            "Schema-based response validation",
             "Token auth headers and logout on 401",
             "localStorage cache with TTL and stale reads",
             "Resource state for loading, stale, error, success",

@@ -1,8 +1,8 @@
 import { bind, For, ResourceView, safeErrorMessage, view } from "@nodiffjs/core";
 import { Badge, PageHeader, SectionTitle } from "../components";
+import type { Post } from "../schemas";
 import {
   apiCache,
-  type Post,
   posts,
   postsVm,
   preferences,
@@ -39,7 +39,7 @@ function PostsToolbar() {
         use={bind.props(postsVm, (state) => ({
           disabled: state.loading,
           aria: { busy: state.loading },
-          title: state.loading ? "Refreshing zod-checked posts" : "Refresh posts",
+          title: state.loading ? "Refreshing validated posts" : "Refresh posts",
         }))}
         onClick={() => void posts.refresh()}
       >
@@ -164,7 +164,7 @@ export function PostsPage() {
   return (
     <section class="page">
       <PageHeader title="Parsed, cached, explicit." actions={<PostsToolbar />}>
-        Fetch uses the browser API, zod validates every response, localStorage keeps stale
+        Fetch uses the browser API, a schema validates each response, localStorage keeps stale
         snapshots, and ResourceView decides which state branch should render.
       </PageHeader>
 
@@ -204,7 +204,7 @@ export function PostsPage() {
         resource={posts}
         pending={() => (
           <p class="notice" role="status">
-            Loading zod-checked posts...
+            Loading posts...
           </p>
         )}
         error={(error) => (

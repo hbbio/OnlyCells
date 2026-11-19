@@ -1,7 +1,19 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { z } from "zod";
 import { LocalCache } from "../src/cache";
+import { defineSchema, ValidationError } from "../src/schema";
 import { installDom } from "./test-dom";
+
+const countSchema = defineSchema((input) => {
+  if (
+    !input ||
+    typeof input !== "object" ||
+    !("count" in input) ||
+    typeof input.count !== "number"
+  ) {
+    throw new ValidationError([{ path: ["count"], message: "Expected a count." }]);
+  }
+  return { count: input.count };
+});
 
 describe("LocalCache", () => {
   let cleanupDom: (() => void) | undefined;
@@ -21,13 +33,12 @@ describe("LocalCache", () => {
     cache.set("one", { count: 1 }, { tags: ["numbers"] });
     window.localStorage.setItem("other:two", "ignored");
 
-    expect(cache.get("one", z.object({ count: z.number() }))?.value).toEqual({ count: 1 });
+    expect(cache.get("one", countSchema)?.value).toEqual({ count: 1 });
     expect(cache.keys()).toEqual(["one"]);
   });
 
   test("removes stale, corrupt, and schema-invalid entries on read", () => {
     const cache = new LocalCache("test:");
-    const schema = z.object({ count: z.number() });
 
     cache.set("stale", { count: 1 }, { ttl: -1 });
     window.localStorage.setItem(cache.fullKey("corrupt"), "{");
@@ -36,9 +47,9 @@ describe("LocalCache", () => {
       JSON.stringify({ value: { count: "one" }, updatedAt: Date.now(), expiresAt: null, tags: [] }),
     );
 
-    expect(cache.get("stale", schema)).toBeUndefined();
-    expect(cache.get("corrupt", schema)).toBeUndefined();
-    expect(cache.get("invalid", schema)).toBeUndefined();
+    expect(cache.get("stale", countSchema)).toBeUndefined();
+    expect(cache.get("corrupt", countSchema)).toBeUndefined();
+    expect(cache.get("invalid", countSchema)).toBeUndefined();
     expect(window.localStorage.getItem(cache.fullKey("stale"))).toBeNull();
     expect(window.localStorage.getItem(cache.fullKey("corrupt"))).toBeNull();
     expect(window.localStorage.getItem(cache.fullKey("invalid"))).toBeNull();

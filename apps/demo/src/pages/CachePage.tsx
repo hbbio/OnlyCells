@@ -25,7 +25,7 @@ export function CachePage() {
     <section class="page">
       <PageHeader title="Inspectable cache state." actions={<CacheActions />}>
         Preferences and HTTP snapshots share the same tiny cache format with expiry, tags, stale
-        reads, and zod validation at read time.
+        reads, and schema validation at read time.
       </PageHeader>
 
       {view(

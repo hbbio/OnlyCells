@@ -1,5 +1,6 @@
 import { bind, text, type Action, type Child } from "@nodiffjs/core";
-import { preferences, themeOptions, type PreferencesData } from "./state";
+import { themeOptions, type PreferencesData } from "./schemas";
+import { preferences } from "./state";
 
 export function PageHeader(props: {
   title: string;

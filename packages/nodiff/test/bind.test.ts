@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createStore } from "zustand/vanilla";
 import { jsx, mount } from "../src/dom";
 import { configureSecurityPolicy } from "../src/security";
-import { bind, type ClassBinding, type PropsBinding, type StyleBinding } from "../src/store";
+import {
+  createCellStore,
+  bind,
+  type ClassBinding,
+  type PropsBinding,
+  type StyleBinding,
+} from "../src/store";
 import { installDom } from "./test-dom";
 
 type BindingState = {
@@ -19,7 +24,7 @@ type BindingState = {
 };
 
 function createBindingStore() {
-  return createStore<BindingState>(() => ({
+  return createCellStore<BindingState>(() => ({
     style: { color: "red", backgroundColor: "white" },
     classes: { active: true, hidden: false },
     userId: "123",
@@ -102,7 +107,7 @@ describe("bind helpers", () => {
   });
 
   test("binds grouped props and cleans removed keys", () => {
-    const store = createStore(() => ({
+    const store = createCellStore(() => ({
       props: {
         disabled: true,
         title: "Initial",
@@ -174,7 +179,7 @@ describe("bind helpers", () => {
   });
 
   test("binds grouped string styles and fallback attributes", () => {
-    const store = createStore(() => ({
+    const store = createCellStore(() => ({
       props: {
         style: "display: none; color: red;",
         custom: "yes",
@@ -213,7 +218,7 @@ describe("bind helpers", () => {
   test("binds text, single classes, attribute variants, plain dataset keys, and style resets", () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
-    const store = createStore(() => ({
+    const store = createCellStore(() => ({
       label: null as string | null,
       active: false,
       flag: false,
@@ -310,7 +315,7 @@ describe("bind helpers", () => {
   });
 
   test("binds string values and checked state with cleanup", () => {
-    const store = createStore(() => ({
+    const store = createCellStore(() => ({
       title: "Initial",
       accepted: false,
     }));
@@ -525,7 +530,7 @@ describe("bind helpers", () => {
   });
 
   test("blocks unsafe URL and CSS values in bindings", () => {
-    const store = createStore(() => ({
+    const store = createCellStore(() => ({
       href: "https://example.test",
       srcset: "/small.png 1x, /large.png 2x",
       style: { color: "green" } as StyleBinding,
@@ -562,7 +567,7 @@ describe("bind helpers", () => {
   });
 
   test("blocks unsafe grouped props", () => {
-    const store = createStore(() => ({
+    const store = createCellStore(() => ({
       props: {
         href: "https://example.test",
         style: { color: "green" },
@@ -606,7 +611,7 @@ describe("bind helpers", () => {
   });
 
   test("blocks raw HTML DOM sink property bindings", () => {
-    const rawProperty = createStore(() => ({
+    const rawProperty = createCellStore(() => ({
       html: "<img src=x onerror=alert(1)>",
     }));
 
@@ -626,7 +631,7 @@ describe("bind helpers", () => {
       }),
     ).toThrow("Raw HTML DOM sink");
 
-    const grouped = createStore(() => ({
+    const grouped = createCellStore(() => ({
       props: {
         title: "Safe",
       } satisfies PropsBinding,

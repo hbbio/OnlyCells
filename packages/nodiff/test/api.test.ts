@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { z } from "zod";
 import { ApiError, createApi } from "../src/api";
 import { createLocalCache } from "../src/cache";
+import { defineSchema, ValidationError } from "../src/schema";
 import { configureSecurityPolicy, SecurityViolationError } from "../src/security";
 import { installDom } from "./test-dom";
 
@@ -9,6 +9,13 @@ type FetchCall = {
   url: string;
   init: RequestInit | undefined;
 };
+
+const settingsSchema = defineSchema((input) => {
+  if (!input || typeof input !== "object" || !("ok" in input) || typeof input.ok !== "boolean") {
+    throw new ValidationError([{ path: ["ok"], message: "Expected a boolean." }]);
+  }
+  return { ok: input.ok };
+});
 
 function jsonResponse(value: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(value), {
@@ -148,15 +155,24 @@ describe("createApi", () => {
   test("serializes JSON bodies and parses schemas", async () => {
     globalThis.fetch = async (url, init) => {
       calls.push({ url: inputUrl(url), init });
-      return jsonResponse({ id: 1, name: "Ada" });
+      return jsonResponse({ id: 1, name: "Ada", extra: true });
     };
 
     const api = createApi({ baseUrl: "/api" });
-    const user = await api.post(
-      "/users",
-      { name: "Ada" },
-      { schema: z.object({ id: z.number(), name: z.string() }) },
-    );
+    const schema = defineSchema((input) => {
+      if (
+        !input ||
+        typeof input !== "object" ||
+        !("id" in input) ||
+        typeof input.id !== "number" ||
+        !("name" in input) ||
+        typeof input.name !== "string"
+      ) {
+        throw new ValidationError([{ path: [], message: "Expected a user." }]);
+      }
+      return { id: input.id, name: input.name };
+    });
+    const user = await api.post("/users", { name: "Ada" }, { schema });
 
     expect(user).toEqual({ id: 1, name: "Ada" });
     expect(calls[0]?.init?.body).toBe('{"name":"Ada"}');
@@ -467,13 +483,13 @@ describe("createApi", () => {
     );
     await expect(
       api.get("/settings", {
-        schema: z.object({ ok: z.boolean() }),
+        schema: settingsSchema,
         cache: { ttl: 5_000 },
       }),
     ).rejects.toThrow("maxTtl");
     await expect(
       api.get("/settings", {
-        schema: z.object({ ok: z.boolean() }),
+        schema: settingsSchema,
         cache: { ttl: 500 },
       }),
     ).resolves.toEqual({ ok: true });
@@ -497,11 +513,22 @@ describe("createApi", () => {
     );
     await expect(
       api.get("/settings", {
-        schema: z.object({ ok: z.boolean() }),
+        schema: settingsSchema,
         cache: { ttl: 500 },
       }),
     ).resolves.toEqual({ ok: true });
     expect(calls).toHaveLength(1);
+  });
+
+  test("rejects invalid responses before caching them", async () => {
+    globalThis.fetch = async () => jsonResponse({ ok: "yes" });
+    const cache = createLocalCache("api-test:");
+    const api = createApi({ baseUrl: "/api", cache });
+
+    await expect(
+      api.get("/settings", { schema: settingsSchema, cache: { key: "settings", ttl: 500 } }),
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(cache.keys()).toEqual([]);
   });
 
   test("aborts requests that exceed a configured timeout", async () => {

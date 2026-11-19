@@ -1,4 +1,4 @@
-import { createStore, type StoreApi } from "zustand/vanilla";
+import { createCellStore, type CellStore } from "./store.ts";
 
 export type ResourceStatus = "idle" | "loading" | "success" | "error";
 
@@ -47,7 +47,7 @@ type ResourceLoad<T, TArgs> = [undefined] extends [TArgs]
   : (args: TArgs) => Promise<T | undefined>;
 
 export type Resource<T, TArgs = void> = {
-  store: StoreApi<ResourceState<T>>;
+  store: CellStore<ResourceState<T>>;
   load: ResourceLoad<T, TArgs>;
   refresh(): Promise<T | undefined>;
   mutate(next: T | ((current: T | null) => T)): void;
@@ -64,7 +64,7 @@ export function createResource<T, TArgs = void>(
   options: ResourceOptions<T, TArgs>,
 ): Resource<T, TArgs> {
   const initialData = options.initialData ?? null;
-  const store = createStore<ResourceState<T>>(() => ({
+  const store = createCellStore<ResourceState<T>>(() => ({
     status: initialData === null ? "idle" : "success",
     data: initialData,
     error: null,

@@ -1,8 +1,7 @@
-import { createStore } from "zustand/vanilla";
-import { bind, derivedStore, type PropsBinding } from "../src/store";
+import { createCellStore, bind, derivedStore, type PropsBinding } from "../src/store";
 
-const count = createStore(() => ({ value: 1 }));
-const label = createStore(() => ({ value: "posts" }));
+const count = createCellStore(() => ({ value: 1 }));
+const label = createCellStore(() => ({ value: "posts" }));
 
 const vm = derivedStore([count, label], (countState, labelState) => ({
   label: labelState.value,

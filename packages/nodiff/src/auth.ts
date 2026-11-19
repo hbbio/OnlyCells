@@ -1,6 +1,7 @@
-import { createStore } from "zustand/vanilla";
-import { z } from "zod";
+import { isObject } from "@okcontract/cells";
 import { createLocalCache } from "./cache.ts";
+import { defineSchema, type Schema, ValidationError } from "./schema.ts";
+import { createCellStore } from "./store.ts";
 
 export type AuthToken = {
   accessToken: string;
@@ -9,14 +10,20 @@ export type AuthToken = {
   tokenType?: string | undefined;
 };
 
-export const AuthTokenSchema: z.ZodType<AuthToken> = z
-  .object({
-    accessToken: z.string().min(1),
-    refreshToken: z.string().optional(),
-    expiresAt: z.number().optional(),
-    tokenType: z.string().optional(),
-  })
-  .passthrough();
+export const AuthTokenSchema = defineSchema((input): AuthToken => {
+  if (
+    !isObject(input) ||
+    typeof input.accessToken !== "string" ||
+    input.accessToken.length === 0 ||
+    (input.refreshToken !== undefined && typeof input.refreshToken !== "string") ||
+    (input.expiresAt !== undefined &&
+      (typeof input.expiresAt !== "number" || !Number.isFinite(input.expiresAt))) ||
+    (input.tokenType !== undefined && typeof input.tokenType !== "string")
+  ) {
+    throw new ValidationError([{ path: [], message: "Invalid authentication token." }]);
+  }
+  return input as AuthToken;
+});
 
 export type AuthState<TUser = unknown, TToken extends AuthToken = AuthToken> = {
   token: TToken | null;
@@ -29,7 +36,7 @@ export type AuthState<TUser = unknown, TToken extends AuthToken = AuthToken> = {
 
 export type AuthOptions<TToken extends AuthToken> = {
   storageKey?: string;
-  tokenSchema?: z.ZodType<TToken>;
+  tokenSchema?: Schema<TToken>;
   persist?: boolean;
   allowRefreshTokenPersistence?: boolean;
 };
@@ -38,7 +45,7 @@ export function createAuth<TUser = unknown, TToken extends AuthToken = AuthToken
   options: AuthOptions<TToken> = {},
 ) {
   const storageKey = options.storageKey ?? "nodiff:auth";
-  const schema = options.tokenSchema ?? (AuthTokenSchema as z.ZodType<TToken>);
+  const schema = options.tokenSchema ?? (AuthTokenSchema as Schema<TToken>);
   const cache = createLocalCache("");
   const persist = options.persist ?? false;
 
@@ -63,7 +70,7 @@ export function createAuth<TUser = unknown, TToken extends AuthToken = AuthToken
 
   const savedToken = persist ? readSavedToken() : null;
 
-  const store = createStore<AuthState<TUser, TToken>>((set) => ({
+  const store = createCellStore<AuthState<TUser, TToken>>((set) => ({
     token: savedToken,
     user: null,
     status: savedToken ? "authenticated" : "anonymous",

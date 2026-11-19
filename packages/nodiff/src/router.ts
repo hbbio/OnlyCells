@@ -1,8 +1,7 @@
-import { createStore, type StoreApi } from "zustand/vanilla";
 import { type Action, type Child, type ElementProps, jsx } from "./dom.ts";
 import { safeErrorMessage, toError } from "./errors.ts";
 import { getSecurityPolicy } from "./security.ts";
-import { subscribeSelector, view } from "./store.ts";
+import { createCellStore, type CellStore, subscribeSelector, view } from "./store.ts";
 
 export type RouteContext<TMeta = unknown> = {
   path: string;
@@ -44,7 +43,7 @@ export type LinkProps = Omit<ElementProps<HTMLAnchorElement>, "href"> & {
 };
 
 export type Router<TMeta = unknown> = {
-  store: StoreApi<RouterState<TMeta>>;
+  store: CellStore<RouterState<TMeta>>;
   mode: "history" | "hash";
   href(to: string): string;
   navigate(to: string, options?: { replace?: boolean }): void;
@@ -122,7 +121,11 @@ function matchesPathSegment(pathname: string, targetPathname: string): boolean {
   return current === target || current.startsWith(`${target}/`);
 }
 
-function isActivePath(state: RouterState, to: string, exact: boolean | undefined): boolean {
+function isActivePath<TMeta>(
+  state: RouterState<TMeta>,
+  to: string,
+  exact: boolean | undefined,
+): boolean {
   const target = parsePath(to);
   const targetQuery = target.query.toString();
 
@@ -221,7 +224,7 @@ export function createRouter<TMeta = unknown>(
     return `${window.location.pathname}${window.location.search}`;
   };
 
-  const store = createStore<RouterState<TMeta>>(() => routeMatch(compiled, readPath()));
+  const store = createCellStore<RouterState<TMeta>>(() => routeMatch(compiled, readPath()));
 
   const sync = () => store.setState(routeMatch(compiled, readPath()), true);
 

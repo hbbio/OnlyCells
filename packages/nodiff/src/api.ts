@@ -1,4 +1,3 @@
-import type { z } from "zod";
 import { createLocalCache, type LocalCache, type CacheWriteOptions } from "./cache.ts";
 import {
   csrfHeaderName,
@@ -6,13 +5,14 @@ import {
   readCsrfToken,
   type CsrfRequestOptions,
 } from "./csrf.ts";
+import type { Schema } from "./schema.ts";
 import {
   resolveSecurityPolicy,
   type SecurityPolicy,
   type SecurityPolicyOptions,
 } from "./security.ts";
 
-export type ApiSchema<T> = z.ZodType<T>;
+export type ApiSchema<T> = Schema<T>;
 
 export type QueryValue = string | number | boolean | null | undefined;
 

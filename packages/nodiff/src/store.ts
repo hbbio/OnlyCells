@@ -1,3 +1,4 @@
+import { Sheet } from "@okcontract/cells";
 import { addCleanup, clearBetween, removeNode } from "./lifecycle.ts";
 import {
   assertSafeCssValue,
@@ -17,6 +18,43 @@ export interface ReadableStore<T> {
 
 export interface WritableStore<T> extends ReadableStore<T> {
   setState(partial: Partial<T> | T | ((state: T) => Partial<T> | T), replace?: boolean): void;
+}
+
+export interface CellStore<T> extends WritableStore<T> {
+  getInitialState(): T;
+}
+
+export function createCellStore<T>(
+  initialize: (set: WritableStore<T>["setState"]) => T,
+): CellStore<T> {
+  // Box snapshots so every state is an ordinary, defined cell value.
+  const initial = { state: initialize(setState) };
+  const cell = new Sheet(Object.is).new(initial);
+  const snapshot = () => cell.value ?? initial;
+
+  function setState(partial: Partial<T> | T | ((state: T) => Partial<T> | T), replace?: boolean) {
+    const { state } = snapshot();
+    const next =
+      typeof partial === "function" ? (partial as (state: T) => Partial<T> | T)(state) : partial;
+    if (Object.is(state, next)) return;
+    const replaceState = replace ?? (typeof next !== "object" || next === null);
+    cell.set({ state: replaceState ? (next as T) : Object.assign({}, state, next) });
+  }
+
+  return {
+    getState: () => snapshot().state,
+    getInitialState: () => initial.state,
+    setState,
+    subscribe(listener) {
+      let previous = snapshot();
+      return cell.subscribe((current) => {
+        if (current === previous) return;
+        const old = previous.state;
+        previous = current;
+        listener(current.state, old);
+      });
+    },
+  };
 }
 
 export type Selector<TState, TValue> = (state: TState) => TValue;

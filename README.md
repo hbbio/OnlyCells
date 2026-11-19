@@ -6,12 +6,14 @@ In the LLM era, you do not need a fat web framework for every browser app, espec
 
 That shape is easier for people and coding agents to integrate, inspect, change, and reason about. Fewer hidden layers means fewer bugs, faster feedback, and less time spent reverse-engineering framework behavior.
 
-NoDiff gives you JSX ergonomics, real DOM nodes, explicit store subscriptions, zod-checked data, localStorage caching, token auth, forms, and routing. It does this without React, axios, a virtual DOM, a scheduler, or a framework runtime that owns your app.
+NoDiff gives you JSX ergonomics, real DOM nodes, Cells-backed stores, schema-checked data, localStorage caching, token auth, forms, and routing. It does this without React, axios, a virtual DOM, or a framework runtime that owns your app.
 
 The whole idea is small enough to keep in your head:
 
 ```tsx
-const counter = createStore(() => ({ count: 0 }));
+import { createCellStore, mount, text } from "@nodiffjs/core";
+
+const counter = createCellStore(() => ({ count: 0 }));
 
 function App() {
   return (
@@ -24,7 +26,7 @@ function App() {
 mount("#app", App);
 ```
 
-TSX compiles through Bun into calls to `@nodiffjs/core/jsx-runtime`. Those calls create real DOM nodes (like Svelte). Stores decide when small regions update. Data enters the app through zod schemas. Cache entries carry expiry. Auth is just a bearer header helper over an app-owned token.
+TSX compiles through Bun into calls to `@nodiffjs/core/jsx-runtime`. Those calls create real DOM nodes (like Svelte). Stores decide when small regions update. Schemas parse external data before it enters app state. Cache entries carry expiry. Auth is just a bearer header helper over an app-owned token.
 
 This repo contains both the framework package and a demo app.
 
@@ -124,21 +126,21 @@ You can read the code for those pieces in a few files.
 
 ## What you get
 
-| Area           | Included                                                                         |
-| -------------- | -------------------------------------------------------------------------------- |
-| TSX runtime    | `jsx`, `jsxs`, `jsxDEV`, `Fragment`, intrinsic element typing                    |
-| DOM            | `mount`, `append`, direct node creation, events, refs, actions                   |
-| Lifecycle      | cleanup on unmount and region redraw                                             |
-| State bindings | `text`, `view`, `when`, `Show`, `list`, `For`, `ResourceView`, `Await`, `bind.*` |
-| Stores         | works with `zustand/vanilla` and any compatible store shape                      |
-| API client     | `fetch`, query params, JSON body handling, zod parsing, auth headers, 401 hook   |
-| Cache          | localStorage envelopes with TTL, tags, stale reads, schema validation            |
-| Auth           | bearer token controller over zustand vanilla with optional persistence           |
-| Resource state | loading, stale, success, error, abort, refresh, mutate                           |
-| Router         | hash or history mode, route params, query params, active links                   |
-| Forms          | zod-backed submit action, native validity messages                               |
-| Security       | DOM sink hardening, strict request policy, CSRF helpers, safe error fallbacks    |
-| Tooling        | Bun workspaces, built-in dev server, bundler, formatter, and TypeScript 7        |
+| Area           | Included                                                                          |
+| -------------- | --------------------------------------------------------------------------------- |
+| TSX runtime    | `jsx`, `jsxs`, `jsxDEV`, `Fragment`, intrinsic element typing                     |
+| DOM            | `mount`, `append`, direct node creation, events, refs, actions                    |
+| Lifecycle      | cleanup on unmount and region redraw                                              |
+| State bindings | `text`, `view`, `when`, `Show`, `list`, `For`, `ResourceView`, `Await`, `bind.*`  |
+| Stores         | `createCellStore` and bindings for the `ReadableStore` interface                  |
+| API client     | `fetch`, query params, JSON body handling, schema parsing, auth headers, 401 hook |
+| Cache          | localStorage envelopes with TTL, tags, stale reads, schema validation             |
+| Auth           | bearer token controller with a Cells-backed store and optional persistence        |
+| Resource state | loading, stale, success, error, abort, refresh, mutate                            |
+| Router         | hash or history mode, route params, query params, active links                    |
+| Forms          | schema-validated submit action, native validity messages                          |
+| Security       | DOM sink hardening, strict request policy, CSRF helpers, safe error fallbacks     |
+| Tooling        | Bun workspaces, built-in dev server, bundler, formatter, and TypeScript 7         |
 
 ## Run it
 
@@ -191,7 +193,7 @@ NoDiff tries to make the safe path the short path for rich-client apps:
 - `configureSecurityPolicy(...)` installs a process-wide policy for strict origin checks, allowed
   URL schemes, HTTPS enforcement, cache TTL/schema rules, CSRF mode, and security event reporting.
 - `createApi(...)` resolves requests against a configured `baseUrl`, strips managed auth headers
-  from other origins, supports required auth, zod response schemas, cache partitioning by auth,
+  from other origins, supports required auth, response schemas, cache partitioning by auth,
   strict cached-response schemas, bounded cache TTLs, request timeouts, external-origin opt in, and
   CSRF headers.
 - `createAuth(...)` keeps tokens in memory by default. localStorage persistence is explicit, and
@@ -242,14 +244,14 @@ const headers = securityHeaders({
 
 The demo is intentionally plain. It shows the framework surface without hiding it behind another abstraction.
 
-| Route    | What it demonstrates                                                         |
-| -------- | ---------------------------------------------------------------------------- |
-| `/`      | direct DOM TSX, persisted zustand state, live text binding, theme preference |
-| `/posts` | zod-validated API data, cached GET request, resource state, search binding   |
-| `/auth`  | fake token login, bearer token headers, zod form submit                      |
-| `/cache` | cache key inspection, localStorage clearing, auth reset                      |
+| Route    | What it demonstrates                                                       |
+| -------- | -------------------------------------------------------------------------- |
+| `/`      | direct DOM TSX, persisted Cells state, live text binding, theme preference |
+| `/posts` | validated API data, cached GET request, resource state, search binding     |
+| `/auth`  | fake token login, bearer token headers, validated form submit              |
+| `/cache` | cache key inspection, localStorage clearing, auth reset                    |
 
-The API data comes from JSONPlaceholder. The app parses every post through zod before it enters UI state.
+The API data comes from JSONPlaceholder. The app validates every post before it enters UI state.
 
 ## Tutorial: build the mental model
 
@@ -257,7 +259,9 @@ This section walks through the app from zero to a useful screen.
 
 ### 1. Create a store
 
-NoDiff does not ship its own state container. It expects a simple vanilla store shape:
+`createCellStore` keeps each snapshot in a cell. Read it with `getState()`, write it with
+`setState()`, and subscribe to changes with `subscribe()`. Bindings accept any store with this
+readable interface.
 
 ```ts
 interface ReadableStore<T> {
@@ -266,12 +270,10 @@ interface ReadableStore<T> {
 }
 ```
 
-That is the shape exposed by `zustand/vanilla`.
-
 ```ts
-import { createStore } from "zustand/vanilla";
+import { createCellStore } from "@nodiffjs/core";
 
-const preferences = createStore(() => ({
+const preferences = createCellStore(() => ({
   count: 0,
   search: "",
   theme: "system" as "system" | "light" | "dark",
@@ -384,19 +386,13 @@ The `by` function is used instead of a `key` prop because JSX treats `key` as sp
 
 ### 6. Parse API data at the edge
 
-The API client wraps `fetch` and accepts a zod schema.
+The API client wraps `fetch` and accepts a synchronous schema. `defineSchema` turns a parser
+into a schema with `parse` and `safeParse`. Return typed data on success and throw a
+`ValidationError` with field paths and messages for invalid input.
 
 ```ts
-import { z } from "zod";
-
-const PostSchema = z.object({
-  userId: z.number(),
-  id: z.number(),
-  title: z.string(),
-  body: z.string(),
-});
-
-const PostsSchema = z.array(PostSchema);
+import { createApi } from "@nodiffjs/core";
+import { PostsSchema } from "./schemas";
 
 const api = createApi({
   baseUrl: "https://jsonplaceholder.typicode.com",
@@ -407,7 +403,8 @@ const posts = await api.get("/posts", {
 });
 ```
 
-Parsed data is typed. Bad data fails before it reaches your UI.
+The demo's `PostsSchema` checks each post and selects its known fields. Parsed data is typed,
+and invalid data is rejected before it reaches the UI. [Demo schemas](apps/demo/src/schemas.ts)
 
 ### 7. Add cache with TTL
 
@@ -451,7 +448,7 @@ When a schema is passed on read, cached data is parsed again. Corrupt or outdate
 
 ### 8. Wrap loading and errors in a resource
 
-`createResource` gives you a zustand store around an async function.
+`createResource` gives you a Cells-backed store around an async function.
 
 ```ts
 const posts = createResource({
@@ -594,19 +591,18 @@ function PostPage(ctx: RouteContext) {
 }
 ```
 
-### 11. Handle forms with zod
+### 11. Validate forms
 
-`zodSubmit` converts `FormData` to an object, parses it, and sends zod issues into native form validity where possible.
+`validatedSubmit` converts `FormData` to an object, parses it, and sends field issues into native
+form validity where possible.
 
 ```tsx
-const LoginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-});
+import { validatedSubmit } from "@nodiffjs/core";
+import { LoginSchema } from "./schemas";
 
 function LoginForm() {
   return (
-    <form use={zodSubmit(LoginSchema, login)}>
+    <form use={validatedSubmit(LoginSchema, login)}>
       <input name="email" type="email" autocomplete="email" />
       <input name="password" type="password" autocomplete="current-password" />
       <button type="submit">Sign in</button>
@@ -615,11 +611,18 @@ function LoginForm() {
 }
 ```
 
-For numeric fields, use zod coercion because browser form values are strings:
+Browser form values arrive as strings. Convert numeric fields inside the parser.
 
 ```ts
-const ProfileSchema = z.object({
-  age: z.coerce.number().int().min(13),
+import { defineSchema, ValidationError } from "@nodiffjs/core";
+
+const ProfileSchema = defineSchema((input) => {
+  const field = input && typeof input === "object" && "age" in input ? input.age : undefined;
+  const age = typeof field === "string" && field.trim() ? Number(field) : NaN;
+  if (!Number.isSafeInteger(age) || age < 13) {
+    throw new ValidationError([{ path: ["age"], message: "Enter an age of 13 or older." }]);
+  }
+  return { age };
 });
 ```
 
@@ -793,7 +796,7 @@ type ApiRequestOptions<T> = {
   body?: unknown;
   headers?: HeadersInit;
   signal?: AbortSignal;
-  schema?: z.ZodType<T>;
+  schema?: Schema<T>;
   cache?:
     | false
     | {
@@ -826,7 +829,7 @@ auth.isExpired();
 auth.isAuthenticated();
 ```
 
-The auth store is a zustand vanilla store:
+The auth controller exposes its Cells-backed store.
 
 ```ts
 auth.store.getState();
@@ -889,33 +892,34 @@ Route paths support static segments, params, and a wildcard:
 ```ts
 formValues(form);
 clearFormValidity(form);
-applyZodValidity(form, error);
-zodSubmit(schema, handler, options?);
+applyFormValidity(form, error);
+validatedSubmit(schema, handler, options?);
 ```
 
-Use `zodSubmit` as a form action:
+Use `validatedSubmit` as a form action.
 
 ```tsx
-<form use={zodSubmit(Schema, save, { resetOnSuccess: true })}>...</form>
+<form use={validatedSubmit(Schema, save, { resetOnSuccess: true })}>...</form>
 ```
 
 ## Recipes
 
-### Persist a zustand store
+### Persist a Cells-backed store
 
 ```ts
-const cache = createLocalCache("app:");
+import { createCellStore, createLocalCache } from "@nodiffjs/core";
+import { PreferencesSchema } from "./schemas";
 
-const PreferencesSchema = z.object({
-  theme: z.enum(["system", "light", "dark"]),
-  sidebarOpen: z.boolean(),
-});
+const cache = createLocalCache("app:");
 
 const saved = cache.get("preferences", PreferencesSchema, { allowStale: true })?.value;
 
-const preferences = createStore(() => ({
+const preferences = createCellStore(() => ({
+  count: saved?.count ?? 0,
+  search: saved?.search ?? "",
+  postPage: saved?.postPage ?? 1,
   theme: saved?.theme ?? "system",
-  sidebarOpen: saved?.sidebarOpen ?? true,
+  step: saved?.step ?? 1,
 }));
 
 preferences.subscribe((state) => {
@@ -1002,7 +1006,7 @@ A static subtree remains static. A text node subscribed with `text` updates itse
 
 ### Data is trusted after parsing
 
-The API client and cache both accept zod schemas. The goal is to reject bad network data and stale cache shapes at the boundary.
+The API client and cache both accept synchronous schemas to reject invalid network data and cache shapes at the boundary.
 
 ### localStorage is treated as a cache
 
@@ -1010,7 +1014,7 @@ Every write stores an envelope with `updatedAt`, `expiresAt`, and `tags`. A read
 
 ### The router is a store
 
-Routing state is a zustand vanilla store. The outlet is a `view` over the current path. Links are anchors with click handling and optional active class binding.
+Routing state lives in a Cells-backed store. The outlet is a `view` over the current path. Links are anchors with click handling and optional active class binding.
 
 ## What this deliberately skips
 
@@ -1049,7 +1053,7 @@ To understand the framework, read these files in order:
 2. `packages/nodiff/src/lifecycle.ts` for cleanup
 3. `packages/nodiff/src/store.ts` for text, view, list, and form control bindings
 4. `packages/nodiff/src/cache.ts` for localStorage envelopes
-5. `packages/nodiff/src/api.ts` for zod-backed fetch and auth headers
+5. `packages/nodiff/src/api.ts` for response validation and auth headers
 6. `packages/nodiff/src/resource.ts` for async state
 7. `packages/nodiff/src/router.ts` for navigation
 8. `apps/demo/src/main.tsx` for the whole app in one place
@@ -1058,21 +1062,22 @@ To understand the framework, read these files in order:
 
 ```txt
 packages/nodiff/src/
-  api.ts              fetch client with zod, auth, cache
+  api.ts              fetch client with schema validation, auth, and cache
   auth.ts             bearer token store with optional persistence
   cache.ts            localStorage cache with TTL and tags
   csrf.ts             CSRF token readers and double-submit helpers
   dom.ts              direct DOM TSX runtime
   errors.ts           redacted error messages for UI fallbacks
-  forms.ts            zod form action and validity helpers
+  forms.ts            validated form action and validity helpers
   index.ts            public exports
   jsx-dev-runtime.ts  Development automatic JSX runtime entry
   jsx-runtime.ts      TypeScript automatic JSX runtime entry
   lifecycle.ts        cleanup registry
   resource.ts         async resource store
   router.ts           hash/history router
+  schema.ts           synchronous schemas and validation issues
   security.ts         policy, CSP, and security header helpers
-  store.ts            zustand-compatible bindings
+  store.ts            Cells-backed stores and DOM bindings
 ```
 
 ## Modern browser target

@@ -1,12 +1,7 @@
-import { bind, Show, text, zodSubmit } from "@nodiffjs/core";
+import { bind, Show, text, validatedSubmit } from "@nodiffjs/core";
 import { PageHeader, SectionTitle, StatusMetric } from "../components";
-import {
-  auth,
-  demoCookieSessionRequest,
-  fakeLogin,
-  LoginSchema,
-  readDemoCsrfToken,
-} from "../state";
+import { LoginSchema } from "../schemas";
+import { auth, demoCookieSessionRequest, fakeLogin, readDemoCsrfToken } from "../state";
 
 function AuthOverview() {
   return (
@@ -15,7 +10,7 @@ function AuthOverview() {
         label="Session"
         value={text(auth.store, (state) => state.user?.name ?? "guest")}
         badge={text(auth.store, (state) => state.status)}
-        hint="Token state is ordinary zustand data."
+        hint="Token state lives in a cell."
         use={bind.classes(auth.store, (state) => ({
           "tone-success": state.status === "authenticated",
         }))}
@@ -33,7 +28,7 @@ function AuthOverview() {
 function LoginPanel() {
   return (
     <form
-      use={zodSubmit(LoginSchema, fakeLogin, {
+      use={validatedSubmit(LoginSchema, fakeLogin, {
         csrf: {
           getToken: readDemoCsrfToken,
           required: true,

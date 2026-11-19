@@ -8,5 +8,6 @@ export * from "./forms.ts";
 export * from "./lifecycle.ts";
 export * from "./resource.ts";
 export * from "./router.ts";
+export * from "./schema.ts";
 export * from "./security.ts";
 export * from "./store.ts";

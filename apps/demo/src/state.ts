@@ -3,6 +3,7 @@ import {
   cookieSessionRequest,
   createApi,
   createAuth,
+  createCellStore,
   createLocalCache,
   createResource,
   derivedStore,
@@ -10,8 +11,13 @@ import {
   safeErrorMessage,
   type SecurityViolation,
 } from "@nodiffjs/core";
-import { createStore } from "zustand/vanilla";
-import { z } from "zod";
+import {
+  type LoginValues,
+  type Post,
+  PostsSchema,
+  type PreferencesData,
+  PreferencesSchema,
+} from "./schemas";
 
 const demoCsrfToken = crypto.randomUUID();
 
@@ -35,31 +41,6 @@ export const securityPolicy = configureSecurityPolicy({
 export const appCache = createLocalCache("demo:");
 export const apiCache = createLocalCache("demo:http:");
 
-export const themeOptions = [
-  "system",
-  "light",
-  "dark",
-  "cupcake",
-  "corporate",
-  "emerald",
-  "synthwave",
-  "retro",
-  "cyberpunk",
-  "night",
-  "nord",
-  "sunset",
-  "silk",
-] as const;
-
-export const PreferencesSchema = z.object({
-  count: z.number().int().nonnegative(),
-  search: z.string(),
-  postPage: z.number().int().min(1).default(1),
-  theme: z.enum(themeOptions),
-  step: z.number().int().min(1).max(10).default(1),
-});
-
-export type PreferencesData = z.infer<typeof PreferencesSchema>;
 export type PreferencesState = PreferencesData & {
   increment(): void;
   resetCount(): void;
@@ -80,7 +61,7 @@ const defaultPreferences: PreferencesData = {
 const savedPreferences =
   appCache.get("preferences", PreferencesSchema, { allowStale: true })?.value ?? defaultPreferences;
 
-export const preferences = createStore<PreferencesState>((set) => ({
+export const preferences = createCellStore<PreferencesState>((set) => ({
   ...savedPreferences,
   increment: () => set((state) => ({ count: state.count + state.step })),
   resetCount: () => set({ count: 0 }),
@@ -140,15 +121,6 @@ export const sessionApi = createApi({
 });
 
 export const demoCookieSessionRequest = cookieSessionRequest();
-
-export const PostSchema = z.object({
-  userId: z.number(),
-  id: z.number(),
-  title: z.string(),
-  body: z.string(),
-});
-export const PostsSchema = z.array(PostSchema);
-export type Post = z.infer<typeof PostSchema>;
 
 export const posts = createResource<Post[]>({
   immediate: true,
@@ -218,16 +190,9 @@ export function readPostsVm(): PostsVm {
 
 export const postsVm = derivedStore([posts.store, preferences], readPostsVm);
 
-export const cacheInspector = createStore<{ version: number }>(() => ({ version: 0 }));
+export const cacheInspector = createCellStore(() => ({ version: 0 }));
 export const refreshCacheInspector = () =>
   cacheInspector.setState((state) => ({ version: state.version + 1 }));
-
-export const LoginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(4),
-});
-
-export type LoginValues = z.infer<typeof LoginSchema>;
 
 export async function fakeLogin(values: LoginValues): Promise<void> {
   const name = values.email.split("@")[0] || "demo-user";

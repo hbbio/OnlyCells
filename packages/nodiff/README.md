@@ -1,6 +1,6 @@
 # @nodiffjs/core
 
-NoDiff is a small TypeScript package for rich-client apps that use TSX as browser syntax. It creates real DOM nodes, keeps updates explicit through store bindings, and includes helpers for zod-checked API data, localStorage caching, token auth, forms, routing, and security defaults.
+NoDiff is a small TypeScript package for rich-client apps that use TSX as browser syntax. It creates real DOM nodes, keeps updates explicit through Cells-backed stores, and includes helpers for schema-checked API data, localStorage caching, token auth, forms, routing, and security defaults.
 
 This package is designed for a fork-first monorepo workflow. In this repository, the demo app aliases `@nodiffjs/core` directly to `packages/nodiff/src`, so Bun picks up framework and app edits together. The package build emits a `dist` artifact for consumers, fixtures, and optional publishing.
 
@@ -16,10 +16,9 @@ This package is designed for a fork-first monorepo workflow. In this repository,
 ```
 
 ```tsx
-import { catchRender, mount, text } from "@nodiffjs/core";
-import { createStore } from "zustand/vanilla";
+import { catchRender, createCellStore, mount, text } from "@nodiffjs/core";
 
-const counter = createStore(() => ({ count: 0 }));
+const counter = createCellStore(() => ({ count: 0 }));
 
 function App() {
   return (
@@ -45,6 +44,7 @@ Focused subpath entries are also available:
 ```ts
 import { mount } from "@nodiffjs/core/dom";
 import { createApi } from "@nodiffjs/core/api";
+import { defineSchema, ValidationError } from "@nodiffjs/core/schema";
 ```
 
 Automatic JSX runtime entries are exported at `@nodiffjs/core/jsx-runtime` and `@nodiffjs/core/jsx-dev-runtime`.

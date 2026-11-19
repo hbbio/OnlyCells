@@ -7,8 +7,7 @@
     "jsx",
     "tsx",
     "bun",
-    "zod",
-    "zustand"
+    "cells"
   ],
   "license": "MIT",
   "author": "Henri Binsztok",
@@ -67,6 +66,10 @@
       "types": "./dist/router.d.ts",
       "import": "./dist/router.js"
     },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "import": "./dist/schema.js"
+    },
     "./security": {
       "types": "./dist/security.d.ts",
       "import": "./dist/security.js"
@@ -93,7 +96,6 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "zod": "^4.6.7",
-    "zustand": "^5.1.0"
+    "@okcontract/cells": "^0.4.0"
   }
 }
