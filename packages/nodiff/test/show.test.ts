@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createStore } from "zustand/vanilla";
 import { jsx, mount } from "../src/dom";
-import { Show } from "../src/store";
+import { createCellStore, Show } from "../src/store";
 import { installDom } from "./test-dom";
 
 type SessionState = {
@@ -23,7 +22,7 @@ describe("Show", () => {
   });
 
   test("renders fallback for falsy values and children for truthy values", () => {
-    const session = createStore<SessionState>(() => ({ user: null, version: 1 }));
+    const session = createCellStore<SessionState>(() => ({ user: null, version: 1 }));
 
     const unmount = mount(
       "#app",
@@ -47,7 +46,7 @@ describe("Show", () => {
   });
 
   test("accepts static child and fallback nodes", () => {
-    const store = createStore<{ enabled: boolean }>(() => ({ enabled: true }));
+    const store = createCellStore<{ enabled: boolean }>(() => ({ enabled: true }));
 
     const unmount = mount(
       "#app",
@@ -68,7 +67,7 @@ describe("Show", () => {
   });
 
   test("cleans replaced branches and unsubscribes on unmount", () => {
-    const store = createStore<{ enabled: boolean }>(() => ({ enabled: true }));
+    const store = createCellStore<{ enabled: boolean }>(() => ({ enabled: true }));
     let cleanups = 0;
 
     const unmount = mount(
@@ -106,7 +105,7 @@ describe("Show", () => {
   });
 
   test("honors equality for selected values", () => {
-    const store = createStore<{ count: number; label: string }>(() => ({
+    const store = createCellStore<{ count: number; label: string }>(() => ({
       count: 1,
       label: "one",
     }));

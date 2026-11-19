@@ -6,9 +6,8 @@
     "dom",
     "jsx",
     "tsx",
-    "vite",
-    "zod",
-    "zustand"
+    "bun",
+    "cells"
   ],
   "license": "MIT",
   "author": "Henri Binsztok",
@@ -67,6 +66,10 @@
       "types": "./dist/router.d.ts",
       "import": "./dist/router.js"
     },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "import": "./dist/schema.js"
+    },
     "./security": {
       "types": "./dist/security.d.ts",
       "import": "./dist/security.js"
@@ -88,15 +91,11 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsgo -p tsconfig.build.json && node scripts/fix-dist-specifiers.mjs",
+    "build": "tsc -p tsconfig.build.json",
     "prepack": "bun run build",
-    "typecheck": "tsgo -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "zod": "^4.4.3",
-    "zustand": "^5.0.13"
-  },
-  "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260421.2"
+    "@okcontract/cells": "^0.4.0"
   }
 }

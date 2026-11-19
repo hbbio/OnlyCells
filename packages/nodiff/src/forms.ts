@@ -1,6 +1,6 @@
-import type { z } from "zod";
-import { CsrfError, csrfFieldName, readCsrfToken, type CsrfFormOptions } from "./csrf";
-import type { Action } from "./dom";
+import { CsrfError, csrfFieldName, readCsrfToken, type CsrfFormOptions } from "./csrf.ts";
+import type { Action } from "./dom.ts";
+import type { Schema, ValidationError } from "./schema.ts";
 
 export type FormValues = Record<string, FormDataEntryValue | FormDataEntryValue[]>;
 
@@ -34,11 +34,11 @@ export function clearFormValidity(form: HTMLFormElement): void {
   }
 }
 
-export function applyZodValidity(form: HTMLFormElement, error: z.ZodError): void {
+export function applyFormValidity(form: HTMLFormElement, error: ValidationError): void {
   clearFormValidity(form);
 
   for (const issue of error.issues) {
-    const name = issue.path.join(".");
+    const name = issue.path.map(String).join(".");
     if (!name) continue;
     const field = form.elements.namedItem(name);
     if (field instanceof Element && validatable(field)) {
@@ -73,11 +73,11 @@ function ensureCsrfField(form: HTMLFormElement, options: CsrfFormOptions): strin
   return token;
 }
 
-export function zodSubmit<T>(
-  schema: z.ZodType<T>,
+export function validatedSubmit<T, TError extends ValidationError = ValidationError>(
+  schema: Schema<T, TError>,
   handler: (values: T, event: SubmitEvent, form: HTMLFormElement) => void | Promise<void>,
   options: {
-    onError?: (error: z.ZodError, form: HTMLFormElement) => void;
+    onError?: (error: TError, form: HTMLFormElement) => void;
     onCsrfError?: (error: CsrfError, form: HTMLFormElement) => void;
     resetOnSuccess?: boolean;
     csrf?: boolean | CsrfFormOptions;
@@ -101,7 +101,7 @@ export function zodSubmit<T>(
 
       const parsed = schema.safeParse(formValues(form));
       if (!parsed.success) {
-        applyZodValidity(form, parsed.error);
+        applyFormValidity(form, parsed.error);
         options.onError?.(parsed.error, form);
         return;
       }
@@ -114,3 +114,9 @@ export function zodSubmit<T>(
     return () => form.removeEventListener("submit", submit);
   };
 }
+
+/** @deprecated Use applyFormValidity. */
+export const applyZodValidity = applyFormValidity;
+
+/** @deprecated Use validatedSubmit. */
+export const zodSubmit = validatedSubmit;

@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createStore } from "zustand/vanilla";
 import { fragment, jsx, mount } from "../src/dom";
-import { For } from "../src/store";
+import { createCellStore, For } from "../src/store";
 import { installDom } from "./test-dom";
 
 type Item = {
@@ -31,7 +30,7 @@ describe("For", () => {
   test("moves keyed rows without re-rendering stable item identities", () => {
     const alpha: Item = { id: "a", label: "Alpha" };
     const beta: Item = { id: "b", label: "Beta" };
-    const items = createStore<{ items: Item[] }>(() => ({ items: [alpha, beta] }));
+    const items = createCellStore<{ items: Item[] }>(() => ({ items: [alpha, beta] }));
     let renders = 0;
 
     const unmount = mount(
@@ -66,7 +65,7 @@ describe("For", () => {
   test("re-renders changed item identities, cleans removed rows, and shows fallback", () => {
     const initial: Item = { id: "a", label: "Alpha" };
     const updated: Item = { id: "a", label: "Updated alpha" };
-    const items = createStore<{ items: Item[] }>(() => ({ items: [initial] }));
+    const items = createCellStore<{ items: Item[] }>(() => ({ items: [initial] }));
     let cleanups = 0;
 
     const unmount = mount(
@@ -101,7 +100,7 @@ describe("For", () => {
   });
 
   test("rejects duplicate keys before mutating the rendered list", () => {
-    const items = createStore<{ items: Item[] }>(() => ({
+    const items = createCellStore<{ items: Item[] }>(() => ({
       items: [
         { id: "a", label: "Alpha" },
         { id: "a", label: "Again" },
@@ -119,7 +118,7 @@ describe("For", () => {
   });
 
   test("renders fragment rows and labels unserializable duplicate keys", () => {
-    const items = createStore<{ items: Item[] }>(() => ({
+    const items = createCellStore<{ items: Item[] }>(() => ({
       items: [{ id: "a", label: "Alpha" }],
     }));
 
@@ -145,7 +144,7 @@ describe("For", () => {
 
     const key: Record<string, unknown> = {};
     key.self = key;
-    const duplicates = createStore<{ items: Item[] }>(() => ({
+    const duplicates = createCellStore<{ items: Item[] }>(() => ({
       items: [
         { id: "a", label: "Alpha" },
         { id: "b", label: "Beta" },

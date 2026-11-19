@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createStore } from "zustand/vanilla";
 import {
   ErrorBoundary,
   Fragment,
@@ -14,7 +13,7 @@ import {
   trustedHTML,
 } from "../src/dom";
 import { configureSecurityPolicy, type SecurityViolation } from "../src/security";
-import { text, view } from "../src/store";
+import { createCellStore, text, view } from "../src/store";
 import { installDom } from "./test-dom";
 
 describe("DOM runtime", () => {
@@ -61,7 +60,7 @@ describe("DOM runtime", () => {
   });
 
   test("text bindings unsubscribe when their node is cleaned up", () => {
-    const counter = createStore<{ count: number }>(() => ({ count: 0 }));
+    const counter = createCellStore<{ count: number }>(() => ({ count: 0 }));
     const countText = text(counter, (state) => state.count);
     const unmount = mount("#app", jsx("p", { children: ["Count: ", countText] }));
 
@@ -75,7 +74,7 @@ describe("DOM runtime", () => {
   });
 
   test("view redraws bounded regions and cleans replaced nodes", () => {
-    const toggle = createStore<{ enabled: boolean }>(() => ({ enabled: true }));
+    const toggle = createCellStore<{ enabled: boolean }>(() => ({ enabled: true }));
     let cleanups = 0;
 
     const unmount = mount(
@@ -340,11 +339,14 @@ describe("DOM runtime", () => {
       onViolation: (violation) => violations.push(violation),
     });
     const secretError = new Error("database password=secret-token");
+    const store = createCellStore(() => ({ label: "initial" }));
+    let abandoned: Text | undefined;
 
     const unmount = mount(
       "#app",
       catchRender({
         render: () => {
+          abandoned = text(store, (state) => state.label);
           throw secretError;
         },
         onError: (error) => seen.push(error.message),
@@ -354,6 +356,8 @@ describe("DOM runtime", () => {
     const textContent = document.querySelector("#app")?.textContent ?? "";
     expect(textContent).toBe("Something went wrong.");
     expect(textContent).not.toContain("secret-token");
+    store.setState({ label: "updated" });
+    expect(abandoned?.data).toBe("initial");
     expect(seen).toEqual(["database password=secret-token"]);
     expect(violations).toEqual([
       {

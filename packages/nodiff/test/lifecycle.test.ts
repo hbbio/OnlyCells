@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { addCleanup, cleanupNode, replaceChildrenClean } from "../src/lifecycle";
+import { addCleanup, cleanupNode, replaceChildrenClean, withRenderCleanup } from "../src/lifecycle";
 import { installDom } from "./test-dom";
 
 describe("lifecycle helpers", () => {
@@ -55,5 +55,35 @@ describe("lifecycle helpers", () => {
 
     expect(cleanups).toBe(1);
     expect(parent.textContent).toBe("next");
+  });
+
+  test("a failed render cleans new registrations in reverse order", () => {
+    const node = document.createElement("div");
+    const removed = document.createElement("span");
+    const calls: string[] = [];
+    const sharedCleanup = () => {
+      calls.push("shared");
+    };
+    addCleanup(node, sharedCleanup);
+
+    expect(() =>
+      withRenderCleanup(() => {
+        addCleanup(node, sharedCleanup);
+        withRenderCleanup(() =>
+          addCleanup(node, () => {
+            calls.push("nested");
+          }),
+        );
+        addCleanup(removed, () => {
+          calls.push("removed");
+        });
+        cleanupNode(removed);
+        throw new Error("Render failed");
+      }),
+    ).toThrow("Render failed");
+
+    expect(calls).toEqual(["removed", "nested", "shared"]);
+    cleanupNode(node);
+    expect(calls).toEqual(["removed", "nested", "shared", "shared"]);
   });
 });

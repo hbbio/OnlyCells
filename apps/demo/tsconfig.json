@@ -2,14 +2,14 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
+    "types": ["bun"],
     "jsx": "react-jsx",
     "jsxImportSource": "@nodiffjs/core",
-    "types": ["vite/client"],
     "paths": {
       "@nodiffjs/core": ["../../packages/nodiff/src/index.ts"],
       "@nodiffjs/core/jsx-runtime": ["../../packages/nodiff/src/jsx-runtime.ts"],
       "@nodiffjs/core/jsx-dev-runtime": ["../../packages/nodiff/src/jsx-dev-runtime.ts"]
     }
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "build.ts", "preview.ts"]
 }

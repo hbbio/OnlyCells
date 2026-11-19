@@ -1,6 +1,6 @@
-import type { z } from "zod";
+import type { Schema } from "./schema.ts";
 
-export type CacheSchema<T> = z.ZodType<T>;
+export type CacheSchema<T> = Schema<T>;
 
 export type CacheEnvelope<T> = {
   value: T;

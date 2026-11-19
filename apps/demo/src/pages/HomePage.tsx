@@ -1,4 +1,5 @@
 import { bind, text } from "@nodiffjs/core";
+import { component } from "../cells";
 import {
   CounterCard,
   FeatureList,
@@ -7,15 +8,28 @@ import {
   StatusMetric,
   ThemeCard,
 } from "../components";
-import { auth, postsVm } from "../state";
+import { postsState, session } from "../state";
 
-export function HomePage() {
+export const HomePage = component("HomePage", (proxy) => {
+  const authSummary = proxy.map(
+    [session],
+    ({ status, token }) => ({ status, hasToken: token !== null }),
+    "auth summary",
+    true,
+  );
+  const postSummary = proxy.map(
+    [postsState],
+    ({ data, status, stale, loading }) => ({ total: data?.length ?? 0, status, stale, loading }),
+    "post summary",
+    true,
+  );
+
   return (
-    <section class="grid gap-5">
+    <section class="page">
       <PageHeader hero title="TSX as browser syntax.">
         A lean rich-client framework that lives with your app: real DOM nodes, explicit store
-        subscriptions, zod-checked data, cache, auth, forms, and routing without React, axios, a
-        virtual DOM, or a scheduler.
+        subscriptions, validated data, cache, auth, forms, and routing without React, axios, or a
+        virtual DOM.
       </PageHeader>
 
       <SectionTitle title="Live app surface">
@@ -23,28 +37,28 @@ export function HomePage() {
         replay behind these updates.
       </SectionTitle>
 
-      <div class="grid gap-4 xl:grid-cols-[minmax(18rem,1fr)_minmax(22rem,1.4fr)_minmax(16rem,1fr)]">
+      <div class="home-panels">
         <CounterCard />
-        <section class="stats stats-vertical bg-base-100 shadow-sm md:stats-horizontal">
+        <section class="panel metrics">
           <StatusMetric
             label="Auth"
-            value={text(auth.store, (state) => state.status)}
-            badge={text(auth.store, (state) => (state.token ? "token" : "guest"))}
+            value={text(authSummary, (state) => state.status)}
+            badge={text(authSummary, (state) => (state.hasToken ? "token" : "guest"))}
             hint="Bearer-token helper"
-            use={bind.classes(auth.store, (state) => ({
-              "text-success": state.status === "authenticated",
+            use={bind.classes(authSummary, (state) => ({
+              "tone-success": state.status === "authenticated",
             }))}
           />
           <StatusMetric
             label="Posts"
-            value={text(postsVm, (state) => state.total)}
-            badge={text(postsVm, (state) => (state.loading ? "loading" : state.status))}
-            hint={text(postsVm, (state) =>
-              state.stale ? "Stale cache visible while refreshing" : "Zod-validated API data",
+            value={text(postSummary, (state) => state.total)}
+            badge={text(postSummary, (state) => (state.loading ? "loading" : state.status))}
+            hint={text(postSummary, (state) =>
+              state.stale ? "Stale cache visible while refreshing" : "Validated API data",
             )}
-            use={bind.props(postsVm, (state) => ({
+            use={bind.props(postSummary, (state) => ({
               title: `${state.total} parsed posts in memory`,
-              class: { "text-warning": state.loading },
+              class: { "tone-warning": state.loading },
             }))}
           />
         </section>
@@ -55,20 +69,20 @@ export function HomePage() {
         The demo keeps the framework surface visible instead of hiding it behind app-specific
         wrappers.
       </SectionTitle>
-      <section class="grid gap-4 md:grid-cols-2">
+      <section class="feature-panels">
         <FeatureList
           title="Framework surface"
           items={[
             "Direct DOM JSX runtime",
             "Lifecycle cleanup through actions",
-            "Store bindings for text, attrs, classes, inputs",
+            "Cell bindings for text, attributes, classes, and inputs",
             "Hash or history router",
           ]}
         />
         <FeatureList
           title="Data surface"
           items={[
-            "Zod response validation",
+            "Schema-based response validation",
             "Token auth headers and logout on 401",
             "localStorage cache with TTL and stale reads",
             "Resource state for loading, stale, error, success",
@@ -77,4 +91,4 @@ export function HomePage() {
       </section>
     </section>
   );
-}
+});

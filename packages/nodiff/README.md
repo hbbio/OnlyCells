@@ -1,8 +1,8 @@
 # @nodiffjs/core
 
-NoDiff is a small TypeScript package for rich-client apps that use TSX as browser syntax. It creates real DOM nodes, keeps updates explicit through store bindings, and includes helpers for zod-checked API data, localStorage caching, token auth, forms, routing, and security defaults.
+NoDiff is a small TypeScript package for rich-client apps that use TSX as browser syntax. It creates real DOM nodes, keeps updates explicit through Cells-backed stores, and includes helpers for schema-checked API data, localStorage caching, token auth, forms, routing, and security defaults.
 
-This package is designed for a fork-first monorepo workflow. In this repository, the demo app aliases `@nodiffjs/core` directly to `packages/nodiff/src`, so framework and app edits update together during Vite development. The package build still emits a clean `dist` artifact for consumers, fixtures, and optional publishing.
+This package is designed for a fork-first monorepo workflow. In this repository, the demo app aliases `@nodiffjs/core` directly to `packages/nodiff/src`, so Bun picks up framework and app edits together. The package build emits a `dist` artifact for consumers, fixtures, and optional publishing.
 
 ## TSX Setup
 
@@ -17,20 +17,25 @@ This package is designed for a fork-first monorepo workflow. In this repository,
 
 ```tsx
 import { catchRender, mount, text } from "@nodiffjs/core";
-import { createStore } from "zustand/vanilla";
+import { Sheet } from "@okcontract/cells";
 
-const counter = createStore(() => ({ count: 0 }));
+const sheet = new Sheet();
+const counter = sheet.new(0);
 
 function App() {
   return (
-    <button onClick={() => counter.setState((state) => ({ count: state.count + 1 }))}>
-      Count: {text(counter, (state) => state.count)}
+    <button onClick={() => counter.update((count) => count + 1)}>
+      Count: {text(counter, (count) => count)}
     </button>
   );
 }
 
 mount("#app", catchRender({ render: App }));
 ```
+
+DOM bindings accept initialized Cells and `ReadableStore` sources. Give auth, resources, and
+routing a `cell` option to share an application sheet. Use `SheetProxy` for component-local and
+derived cells and call `destroy()` during component cleanup. [Cells proxy lifecycle](https://github.com/okcontract/cells#memory-management-and-proxies)
 
 ## Package Entries
 
@@ -45,25 +50,25 @@ Focused subpath entries are also available:
 ```ts
 import { mount } from "@nodiffjs/core/dom";
 import { createApi } from "@nodiffjs/core/api";
+import { defineSchema, ValidationError } from "@nodiffjs/core/schema";
 ```
 
 Automatic JSX runtime entries are exported at `@nodiffjs/core/jsx-runtime` and `@nodiffjs/core/jsx-dev-runtime`.
 
 ## Local Development
 
-From the repository root:
+With Bun 1.4.4 or later and TypeScript 7 on your `PATH`, run these commands from the repository root.
 
 ```sh
-bun install
+bun install --frozen-lockfile
 bun run dev
 ```
 
-The demo consumes source through Vite aliases. Edit `packages/nodiff/src` and `apps/demo/src` together; HMR stays on the TypeScript source path.
+The demo consumes source through the path aliases in `apps/demo/tsconfig.json`. Edit
+`packages/nodiff/src` and `apps/demo/src` together while the Bun dev server is running.
 
-For package verification:
+From `packages/nodiff`, verify the package contents with Bun. The pack command builds the package.
 
 ```sh
-bun run build
-cd packages/nodiff
-npm --cache /private/tmp/npm-cache pack --dry-run
+bun pm pack --dry-run
 ```
