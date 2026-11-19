@@ -1,6 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { createResource } from "../src/resource";
-import { installDom } from "./test-dom";
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -19,17 +18,6 @@ function deferred<T>(): Deferred<T> {
 }
 
 describe("createResource", () => {
-  let cleanupDom: (() => void) | undefined;
-
-  beforeEach(() => {
-    cleanupDom = installDom();
-  });
-
-  afterEach(() => {
-    cleanupDom?.();
-    cleanupDom = undefined;
-  });
-
   test("ignores stale results from superseded loads", async () => {
     const first = deferred<string>();
     const second = deferred<string>();

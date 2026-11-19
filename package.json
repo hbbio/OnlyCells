@@ -18,8 +18,5 @@
     "check": "bun run typecheck && bun run format:check && bun run test",
     "security:check": "bun audit && bun run check && bun run build"
   },
-  "devDependencies": {
-    "happy-dom": "21.0.4"
-  },
   "packageManager": "bun@1.4.4"
 }

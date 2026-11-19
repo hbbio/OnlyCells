@@ -176,6 +176,17 @@ describe("DOM runtime", () => {
     expect(node.querySelector("script")).toBeNull();
   });
 
+  test("preserves encoded attributes and text through sanitization", () => {
+    const node = jsx("div", {
+      unsafeHTML: sanitizeHTML(
+        '<strong title="Ada&#39;s notes">Ada&#x27;s notes &amp; links</strong>',
+      ),
+    }) as HTMLElement;
+    const strong = node.querySelector("strong");
+    expect(strong?.getAttribute("title")).toBe("Ada's notes");
+    expect(strong?.textContent).toBe("Ada's notes & links");
+  });
+
   test("blocks dangerous DOM sinks and preserves safe ones", () => {
     const link = jsx("a", {
       href: "https://example.test/docs",
