@@ -1,51 +1,55 @@
 # @nodiffjs/core
 
-NoDiff is a small TypeScript package for rich-client apps that use TSX as browser syntax. It creates real DOM nodes, keeps updates explicit through Cells-backed stores, and includes helpers for schema-checked API data, localStorage caching, token auth, forms, routing, and security defaults.
+NoDiff turns TSX into DOM nodes. Cells can update individual text nodes, attributes, and
+properties. The package also includes bindings for forms, a router, and helpers for API requests,
+caching, and auth.
 
-This package is designed for a fork-first monorepo workflow. In this repository, the demo app aliases `@nodiffjs/core` directly to `packages/nodiff/src`, so Bun picks up framework and app edits together. The package build emits a `dist` artifact for consumers, fixtures, and optional publishing.
+## TSX setup
 
-## TSX Setup
+Use the automatic JSX transform in your app’s `tsconfig.json`.
 
 ```json
 {
   "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
     "jsx": "react-jsx",
     "jsxImportSource": "@nodiffjs/core"
   }
 }
 ```
 
+The strict setup uses `skipLibCheck` for the declarations shipped with Cells 0.4.0. Add
+`<div id="app"></div>` to the page for the counter.
+
 ```tsx
-import { catchRender, mount, text } from "@nodiffjs/core";
+import { mount } from "@nodiffjs/core";
 import { Sheet } from "@okcontract/cells";
 
-const sheet = new Sheet();
-const counter = sheet.new(0);
+const clicks = new Sheet().new(0);
 
-function App() {
+function Counter() {
   return (
-    <button onClick={() => counter.update((count) => count + 1)}>
-      Count: {text(counter, (count) => count)}
+    <button type="button" onClick={() => clicks.update((value) => value + 1)}>
+      Clicks: {clicks}
     </button>
   );
 }
 
-mount("#app", catchRender({ render: App }));
+const unmount = mount("#app", Counter);
 ```
 
-DOM bindings accept initialized Cells and `ReadableStore` sources. Give auth, resources, and
-routing a `cell` option to share an application sheet. Use `SheetProxy` for component-local and
-derived cells and call `destroy()` during component cleanup. [Cells proxy lifecycle](https://github.com/okcontract/cells#memory-management-and-proxies)
+The examples use Cells 0.4.0. Pass Cells to `bind.attr` and `bind.prop` for direct updates, or
+use selectors to read fields from a Cell or a `ReadableStore`. Use a `SheetProxy` to group cells
+created by a component and destroy it during cleanup. Auth, resources, and routing take a
+`cell` option when they need to share an application sheet.
 
-## Package Entries
+## Imports
 
-The root entry exports the public surface:
-
-```ts
-import { createApi, createRouter, mount, view } from "@nodiffjs/core";
-```
-
-Focused subpath entries are also available:
+The package root exports the public API. Use a subpath when you only need a particular module.
 
 ```ts
 import { mount } from "@nodiffjs/core/dom";
@@ -53,22 +57,14 @@ import { createApi } from "@nodiffjs/core/api";
 import { defineSchema, ValidationError } from "@nodiffjs/core/schema";
 ```
 
-Automatic JSX runtime entries are exported at `@nodiffjs/core/jsx-runtime` and `@nodiffjs/core/jsx-dev-runtime`.
+The JSX transform uses `@nodiffjs/core/jsx-runtime` or `@nodiffjs/core/jsx-dev-runtime`.
 
-## Local Development
+## Build from source
 
-With Bun 1.4.4 or later and TypeScript 7 on your `PATH`, run these commands from the repository root.
+The demo imports the core source through TypeScript path aliases. From the repository root, run
+`bun install --frozen-lockfile` and `bun run dev` to edit and try both together.
 
-```sh
-bun install --frozen-lockfile
-bun run dev
-```
+Run `bun pm pack --dry-run` in `packages/nodiff` to check the package. The prepack script builds
+the ESM files and declarations in `dist`.
 
-The demo consumes source through the path aliases in `apps/demo/tsconfig.json`. Edit
-`packages/nodiff/src` and `apps/demo/src` together while the Bun dev server is running.
-
-From `packages/nodiff`, verify the package contents with Bun. The pack command builds the package.
-
-```sh
-bun pm pack --dry-run
-```
+The repository README covers the demo, API examples, and production preview. [NoDiff README](https://github.com/hbbio/nodiff/blob/main/README.md)
