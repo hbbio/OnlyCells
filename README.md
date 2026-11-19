@@ -325,6 +325,9 @@ bun run --cwd apps/demo preview
 `bun run check` typechecks both workspaces, checks formatting, and runs tests.
 `bun run security:check` also runs the dependency audit and production build.
 
+GitHub Actions runs `bun run check` and `bun run build` on pull requests and pushes to `main`.
+[CI workflow](.github/workflows/ci.yml)
+
 The build emits the core package into `packages/nodiff/dist` and the demo into `apps/demo/dist`.
 Preview serves the demo on `http://127.0.0.1:4173` by default. Refresh the page after a rebuild to
 load the latest assets. The repo targets ES2022 and the demo uses native CSS features such as

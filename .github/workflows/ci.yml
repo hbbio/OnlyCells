@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install TypeScript
+        run: |
+          bun install --global typescript@7.0.2
+          bun pm bin --global >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check
+        run: bun run check
+
+      - name: Build
+        run: bun run build
