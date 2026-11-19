@@ -1,4 +1,6 @@
+import { Sheet } from "@okcontract/cells";
 import type { Child } from "../src/dom";
+import { bind } from "../src/store";
 
 const validTree: Child = (
   <section class="panel" data-id="home">
@@ -17,6 +19,11 @@ const validTree: Child = (
   </section>
 );
 void validTree;
+
+const count = new Sheet().new(1);
+const caption = count.map((value) => `Count: ${value}`);
+const liveTree: Child = <output use={bind.attr("data-count", count)}>{caption}</output>;
+void liveTree;
 
 // @ts-expect-error catches common event-name typos in TSX.
 const badEvent = <button onClik={() => undefined}>Bad</button>;

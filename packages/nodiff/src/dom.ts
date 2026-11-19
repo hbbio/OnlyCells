@@ -1,9 +1,11 @@
 import { addCleanup, cleanupNode, replaceChildrenClean, withRenderCleanup } from "./lifecycle.ts";
 import { safeErrorMessage, toError } from "./errors.ts";
 import { getSecurityPolicy } from "./security.ts";
+import type { ReadableCell } from "./store.ts";
 
 export type PrimitiveChild = string | number | bigint | boolean | null | undefined;
-export type Child = PrimitiveChild | Node | Child[] | Iterable<Child>;
+type CellChild = ReadableCell<PrimitiveChild | Error>;
+export type Child = PrimitiveChild | Node | CellChild | Child[] | Iterable<Child>;
 export type Component<P extends object = Record<string, unknown>> = (
   props: P & { children?: Child },
 ) => Child;
@@ -313,6 +315,7 @@ export type IntrinsicElements = HTMLIntrinsicElements &
   SVGIntrinsicElements &
   CustomIntrinsicElements;
 
+const svgNamespace = "http://www.w3.org/2000/svg";
 const svgTags = new Set([
   "svg",
   "animate",
@@ -365,18 +368,33 @@ const svgTags = new Set([
   "use",
 ]);
 
-const blockedElementTags = new Set(["script", "iframe", "object", "embed"]);
-const rawHtmlSanitizerBlockedTags = new Set([...blockedElementTags, "link", "meta"]);
-const rawHtmlSinkAttributes = new Set(["innerhtml", "outerhtml", "srcdoc"]);
-const urlAttributes = new Set([
-  "href",
-  "src",
-  "action",
-  "formaction",
-  "poster",
-  "cite",
-  "xlink:href",
-]);
+const blockedTags = Object.freeze(["script", "iframe", "object", "embed"] as const);
+
+export const DOM_SINK_POLICY = Object.freeze({
+  blockedElementTags: blockedTags,
+  rawHtmlSanitizerElementTags: Object.freeze([...blockedTags, "link", "meta"] as const),
+  rawHtmlProperties: Object.freeze(["innerhtml", "outerhtml", "srcdoc"] as const),
+  singleUrlAttributes: Object.freeze([
+    "href",
+    "src",
+    "action",
+    "formaction",
+    "poster",
+    "cite",
+    "xlink:href",
+    "xlinkhref",
+  ] as const),
+  urlListAttributes: Object.freeze(["srcset"] as const),
+  cssAttributes: Object.freeze(["style"] as const),
+  eventAttributePrefix: "on",
+} as const);
+
+const blockedElementTags = new Set<string>(DOM_SINK_POLICY.blockedElementTags);
+const rawHtmlSanitizerBlockedTags = new Set<string>(DOM_SINK_POLICY.rawHtmlSanitizerElementTags);
+const rawHtmlSinkAttributes = new Set<string>(DOM_SINK_POLICY.rawHtmlProperties);
+const singleUrlAttributes = new Set<string>(DOM_SINK_POLICY.singleUrlAttributes);
+const urlListAttributes = new Set<string>(DOM_SINK_POLICY.urlListAttributes);
+const cssAttributes = new Set<string>(DOM_SINK_POLICY.cssAttributes);
 
 function isIterable(value: unknown): value is Iterable<Child> {
   return typeof value === "object" && value !== null && Symbol.iterator in value;
@@ -384,6 +402,16 @@ function isIterable(value: unknown): value is Iterable<Child> {
 
 function isNode(value: unknown): value is Node {
   return typeof Node !== "undefined" && value instanceof Node;
+}
+
+function isCellChild(value: unknown): value is CellChild {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "value" in value &&
+    "subscribe" in value &&
+    typeof value.subscribe === "function"
+  );
 }
 
 const eventAliases = new Map([["DoubleClick", "dblclick"]]);
@@ -507,17 +535,56 @@ function validateSrcsetAttributeValue(element: Element, name: string, value: str
   }
 }
 
-export function validateAttributeValue(element: Element, name: string, value: string): void {
+function checkedDomName(name: string, value?: string): string {
   const normalized = name.toLowerCase();
   if (rawHtmlSinkAttributes.has(normalized)) {
     reportDomViolation(`Raw HTML DOM sink is not supported: ${name}.`, value);
   }
-  if (normalized.startsWith("on")) {
+  if (normalized.startsWith(DOM_SINK_POLICY.eventAttributePrefix)) {
     reportDomViolation(`Event handler attributes are not supported: ${name}.`, value);
   }
-  if (normalized === "style") assertSafeCssValue(value, "style attribute");
-  if (normalized === "srcset") validateSrcsetAttributeValue(element, normalized, value);
-  if (urlAttributes.has(normalized)) safeUrlAttributeValue(element, normalized, value);
+  return normalized;
+}
+
+function hasNativeDomSetter(element: Element, name: string): boolean {
+  for (let owner: object | null = element; owner; owner = Object.getPrototypeOf(owner)) {
+    const property = Object.getOwnPropertyDescriptor(owner, name);
+    if (!property) continue;
+    if (owner === element || !property.set) return false;
+
+    const constructor: unknown = Object.getOwnPropertyDescriptor(owner, "constructor")?.value;
+    if (
+      typeof constructor !== "function" ||
+      !/^(?:Element|HTML\w*Element|MathMLElement)$/.test(constructor.name)
+    ) {
+      return false;
+    }
+
+    // Web IDL prototypes carry their interface name even when the element changes documents.
+    const tag = Object.getOwnPropertyDescriptor(owner, Symbol.toStringTag)?.value;
+    const view = element.ownerDocument.defaultView as (Window & Record<string, unknown>) | null;
+    return tag === constructor.name || view?.[constructor.name] === constructor;
+  }
+  return false;
+}
+
+function checkedSinkString(element: Element, name: string, value: unknown): string | undefined {
+  const normalized = checkedDomName(name, typeof value === "string" ? value : undefined);
+  const singleUrl = singleUrlAttributes.has(normalized);
+  const urlList = urlListAttributes.has(normalized);
+  const css = cssAttributes.has(normalized);
+  if (!singleUrl && !urlList && !css) return;
+  if (typeof value !== "string" && !hasNativeDomSetter(element, name)) return;
+
+  const text = String(value);
+  if (singleUrl) return safeUrlAttributeValue(element, normalized, text);
+  if (urlList) validateSrcsetAttributeValue(element, normalized, text);
+  if (css) assertSafeCssValue(text, "style attribute");
+  return text;
+}
+
+export function validateAttributeValue(element: Element, name: string, value: string): void {
+  checkedSinkString(element, name, value);
 }
 
 function assertSafeElementType(type: string): void {
@@ -605,11 +672,51 @@ function setAria(
 ): void {
   for (const [key, raw] of Object.entries(value)) {
     const name = key.startsWith("aria-") ? key : `aria-${key}`;
-    if (raw === null || raw === undefined || raw === false) {
-      element.removeAttribute(name);
-    } else {
-      element.setAttribute(name, String(raw));
+    setDomAttribute(element, name, raw === true ? "true" : raw);
+  }
+}
+
+export function setDomAttribute(element: Element, name: string, value: unknown): void {
+  if (value === null || value === undefined || value === false) {
+    element.removeAttribute(name);
+    return;
+  }
+  const next = value === true ? "" : domString(value);
+  validateAttributeValue(element, name, next);
+  element.setAttribute(name, next);
+}
+
+export function setDomProperty(
+  element: Element,
+  name: string,
+  value: unknown,
+  fallback: "attribute" | "throw" = "throw",
+): void {
+  const target = element as unknown as Record<string, unknown>;
+  const hasProperty = element.namespaceURI !== svgNamespace && name in target;
+
+  if (value === null || value === undefined || value === false) {
+    if (hasProperty) {
+      checkedDomName(name);
+      const current = target[name];
+      target[name] = typeof current === "boolean" ? false : typeof current === "number" ? 0 : "";
     }
+    element.removeAttribute(name === "className" ? "class" : name);
+    return;
+  }
+
+  if (!hasProperty) {
+    setDomAttribute(element, name, value);
+    return;
+  }
+
+  // Use the checked string for any property whose setter would coerce the value.
+  const next = checkedSinkString(element, name, value) ?? value;
+  try {
+    target[name] = next;
+  } catch (error) {
+    if (fallback === "throw") throw error;
+    setDomAttribute(element, name, next);
   }
 }
 
@@ -651,7 +758,7 @@ function applyProp(element: Element, name: string, value: unknown): void {
   }
 
   if (value === null || value === undefined || value === false) {
-    element.removeAttribute(name === "className" ? "class" : name);
+    setDomAttribute(element, name === "className" ? "class" : name, value);
     return;
   }
 
@@ -711,44 +818,43 @@ function applyProp(element: Element, name: string, value: unknown): void {
   }
 
   if (name.startsWith("aria-") || name.startsWith("data-")) {
-    const next = domString(value);
-    validateAttributeValue(element, name, next);
-    element.setAttribute(name, next);
+    setDomAttribute(element, name, value === true ? "true" : value);
     return;
   }
 
   if (value === true) {
-    element.setAttribute(name, "");
+    setDomAttribute(element, name, value);
     return;
   }
 
-  const target = element as unknown as Record<string, unknown>;
-  if (name in target && !(element instanceof SVGElement)) {
-    try {
-      if (typeof value === "string") validateAttributeValue(element, name, value);
-      target[name] = value;
-      return;
-    } catch {
-      const next = domString(value);
-      validateAttributeValue(element, name, next);
-      element.setAttribute(name, next);
-      return;
-    }
-  }
+  setDomProperty(element, name, value, "attribute");
+}
 
-  const next = domString(value);
-  validateAttributeValue(element, name, next);
-  element.setAttribute(name, next);
+function collectNodes(value: Child): Node[] {
+  if (value === null || value === undefined || typeof value === "boolean") return [];
+  if (isNode(value)) return [value];
+  if (Array.isArray(value)) return value.flatMap(collectNodes);
+  if (typeof value !== "string" && isIterable(value)) {
+    return Array.from(value).flatMap(collectNodes);
+  }
+  if (isCellChild(value)) {
+    const node = document.createTextNode("");
+    const update = (next: PrimitiveChild | Error) => {
+      const content =
+        typeof next === "string" || typeof next === "number" || typeof next === "bigint"
+          ? String(next)
+          : "";
+      if (node.data !== content) node.data = content;
+    };
+    update(value.value);
+    addCleanup(node, value.subscribe(update));
+    return [node];
+  }
+  return [document.createTextNode(String(value))];
 }
 
 export function toNodes(value: Child): Node[] {
-  if (value === null || value === undefined || typeof value === "boolean") return [];
-  if (isNode(value)) return [value];
-  if (Array.isArray(value)) return value.flatMap((child) => toNodes(child));
-  if (typeof value !== "string" && isIterable(value)) {
-    return Array.from(value).flatMap((child) => toNodes(child));
-  }
-  return [document.createTextNode(String(value))];
+  return withRenderCleanup(() => collectNodes(value));
 }
 
 export function fragment(children?: Child): DocumentFragment {
@@ -758,9 +864,9 @@ export function fragment(children?: Child): DocumentFragment {
 }
 
 export function append(parent: Node, value: Child): void {
-  for (const node of toNodes(value)) {
-    parent.appendChild(node);
-  }
+  withRenderCleanup(() => {
+    for (const node of collectNodes(value)) parent.appendChild(node);
+  });
 }
 
 export function jsx<P extends object>(
@@ -781,37 +887,36 @@ export function jsx<K extends keyof CustomIntrinsicElements>(
 ): Child;
 export function jsx(type: string, props: ElementProps | null): Child;
 export function jsx(type: string | Component<any>, props: Record<string, unknown> | null): Child {
-  if (typeof type === "function") {
-    return type({ ...props });
-  }
+  return withRenderCleanup(() => {
+    if (typeof type === "function") return type({ ...props });
 
-  assertSafeElementType(type);
+    assertSafeElementType(type);
 
-  const element = svgTags.has(type)
-    ? document.createElementNS("http://www.w3.org/2000/svg", type)
-    : document.createElement(type);
+    const element = svgTags.has(type)
+      ? document.createElementNS(svgNamespace, type)
+      : document.createElement(type);
 
-  const currentProps = props ?? {};
-  for (const [name, value] of Object.entries(currentProps)) {
-    if (name === "use") continue;
-    applyProp(element, name, value);
-  }
+    const currentProps = props ?? {};
+    for (const [name, value] of Object.entries(currentProps)) {
+      if (name === "use") continue;
+      applyProp(element, name, value);
+    }
 
-  if (
-    currentProps.children !== undefined &&
-    currentProps.unsafeHTML === undefined &&
-    currentProps.textContent === undefined
-  ) {
-    append(element, currentProps.children as Child);
-  }
+    if (
+      currentProps.children !== undefined &&
+      currentProps.unsafeHTML === undefined &&
+      currentProps.textContent === undefined
+    ) {
+      append(element, currentProps.children as Child);
+    }
 
-  if (currentProps.use !== undefined) {
-    applyProp(element, "use", currentProps.use);
-  }
+    if (currentProps.use !== undefined) {
+      applyProp(element, "use", currentProps.use);
+    }
 
-  enforceAnchorRel(element);
-
-  return element;
+    enforceAnchorRel(element);
+    return element;
+  });
 }
 
 export const jsxs = jsx;
@@ -868,8 +973,10 @@ export function mount(
       `Mount target not found: ${typeof host === "string" ? host : host.tagName.toLowerCase()}`,
     );
 
-  const rendered = typeof node === "function" ? (node as Component)(props ?? {}) : node;
-  replaceChildrenClean(element, toNodes(rendered));
+  withRenderCleanup(() => {
+    const rendered = typeof node === "function" ? (node as Component)(props ?? {}) : node;
+    replaceChildrenClean(element, collectNodes(rendered));
+  });
 
   return () => {
     cleanupNode(element);

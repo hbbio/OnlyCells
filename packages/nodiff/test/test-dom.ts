@@ -3,6 +3,7 @@ import { Window } from "happy-dom";
 const domGlobals = [
   "window",
   "document",
+  "localStorage",
   "Node",
   "Element",
   "HTMLElement",

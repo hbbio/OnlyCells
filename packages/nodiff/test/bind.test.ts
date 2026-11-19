@@ -654,6 +654,21 @@ describe("bind helpers", () => {
     unmount();
   });
 
+  test("surfaces property setter errors on Cell updates", () => {
+    const element = document.createElement("div");
+    Object.defineProperty(element, "label", {
+      set(value: string) {
+        if (value === "invalid") throw new Error("Invalid label");
+      },
+    });
+    const label = new Sheet().new("valid");
+    const unsubscribe = bind.prop("label", label, (value) => value)(element);
+
+    expect(() => label.set("invalid")).toThrow("Invalid label");
+    expect(element.hasAttribute("label")).toBe(false);
+    unsubscribe?.();
+  });
+
   test("blocks raw HTML DOM sink property bindings", () => {
     const rawProperty = createCellStore(() => ({
       html: "<img src=x onerror=alert(1)>",

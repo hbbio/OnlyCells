@@ -1,5 +1,7 @@
+import { Sheet } from "@okcontract/cells";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+  DOM_SINK_POLICY,
   ErrorBoundary,
   Fragment,
   catchRender,
@@ -57,6 +59,52 @@ describe("DOM runtime", () => {
 
     expect(cleanups).toBe(1);
     expect(document.querySelector("#app")?.childNodes).toHaveLength(0);
+  });
+
+  test("renders a Cell child as one live text node", () => {
+    const source = new Sheet().new<string | null>("first");
+    const child = source.map((value) => value?.toUpperCase() ?? null);
+    const paragraph = jsx("p", { children: child }) as HTMLParagraphElement;
+    const node = paragraph.firstChild as Text;
+    const unmount = mount("#app", paragraph);
+
+    expect(node.data).toBe("FIRST");
+    source.set("second");
+    expect(paragraph.firstChild).toBe(node);
+    expect(node.data).toBe("SECOND");
+    source.set(null);
+    expect(node.data).toBe("");
+
+    unmount();
+    source.set("detached");
+    expect(node.data).toBe("");
+    expect(child.subscribersCount).toBe(0);
+  });
+
+  test("releases a Cell child if a JSX action throws", () => {
+    const child = new Sheet().new("temporary");
+
+    expect(() =>
+      jsx("p", {
+        children: child,
+        use() {
+          throw new Error("Action failed");
+        },
+      }),
+    ).toThrow("Action failed");
+    expect(child.subscribersCount).toBe(0);
+  });
+
+  test("releases a Cell child if the mounted component throws", () => {
+    const child = new Sheet().new("temporary");
+
+    expect(() =>
+      mount("#app", () => {
+        jsx("p", { children: child });
+        throw new Error("Render failed");
+      }),
+    ).toThrow("Render failed");
+    expect(child.subscribersCount).toBe(0);
   });
 
   test("text bindings unsubscribe when their node is cleaned up", () => {
@@ -150,6 +198,15 @@ describe("DOM runtime", () => {
       "must be a function",
     );
     expect(() => jsx("script", { children: "alert(1)" })).toThrow("not supported");
+  });
+
+  test("keeps DOM sink policy explicit", () => {
+    expect(DOM_SINK_POLICY.blockedElementTags).toContain("script");
+    expect(DOM_SINK_POLICY.rawHtmlProperties).toContain("innerhtml");
+    expect(DOM_SINK_POLICY.singleUrlAttributes).toContain("href");
+    expect(DOM_SINK_POLICY.urlListAttributes).toContain("srcset");
+    expect(DOM_SINK_POLICY.cssAttributes).toEqual(["style"]);
+    expect(DOM_SINK_POLICY.eventAttributePrefix).toBe("on");
   });
 
   test("blocks CSS execution sinks in static styles", () => {

@@ -2,10 +2,11 @@ import { isObject, Sheet } from "@okcontract/cells";
 import { addCleanup, clearBetween, removeNode } from "./lifecycle.ts";
 import {
   assertSafeCssValue,
+  setDomAttribute,
+  setDomProperty,
   type Action,
   type Child,
   toNodes,
-  validateAttributeValue,
 } from "./dom.ts";
 import type { ResourceState } from "./resource.ts";
 
@@ -534,43 +535,6 @@ export function For<TState, TItem, TKey = unknown>(
   return frag;
 }
 
-function setAttributeValue(element: Element, name: string, value: unknown): void {
-  if (value === null || value === undefined || value === false) {
-    element.removeAttribute(name);
-    return;
-  }
-  if (value === true) {
-    element.setAttribute(name, "");
-    return;
-  }
-  if (typeof value === "string") {
-    validateAttributeValue(element, name, value);
-    element.setAttribute(name, value);
-    return;
-  }
-  if (typeof value === "number" || typeof value === "bigint" || typeof value === "symbol") {
-    const next = String(value);
-    validateAttributeValue(element, name, next);
-    element.setAttribute(name, next);
-    return;
-  }
-  if (value instanceof Date) {
-    const next = value.toISOString();
-    validateAttributeValue(element, name, next);
-    element.setAttribute(name, next);
-    return;
-  }
-  try {
-    const next = JSON.stringify(value) ?? Object.prototype.toString.call(value);
-    validateAttributeValue(element, name, next);
-    element.setAttribute(name, next);
-  } catch {
-    const next = Object.prototype.toString.call(value);
-    validateAttributeValue(element, name, next);
-    element.setAttribute(name, next);
-  }
-}
-
 function cssName(name: string): string {
   return name.includes("-") ? name : name.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
 }
@@ -596,9 +560,7 @@ function setDatasetValue(
   value: string | number | boolean | null | undefined,
 ): void {
   if (name.includes("-")) {
-    const attr = `data-${name}`;
-    if (value === null || value === undefined || value === false) element.removeAttribute(attr);
-    else element.setAttribute(attr, String(value));
+    setDomAttribute(element, `data-${name}`, value === true ? "true" : value);
     return;
   }
   if (value === null || value === undefined || value === false) {
@@ -614,41 +576,7 @@ function setAriaValue(
   value: string | number | boolean | null | undefined,
 ): void {
   const attr = name.startsWith("aria-") ? name : `aria-${name}`;
-  if (value === null || value === undefined || value === false) element.removeAttribute(attr);
-  else element.setAttribute(attr, String(value));
-}
-
-function isSvgElement(element: Element): boolean {
-  return typeof SVGElement !== "undefined" && element instanceof SVGElement;
-}
-
-function clearPropertyValue(element: Element, name: string): void {
-  const target = element as unknown as Record<string, unknown>;
-  if (name in target && !isSvgElement(element)) {
-    const current = target[name];
-    target[name] = typeof current === "boolean" ? false : typeof current === "number" ? 0 : "";
-  }
-  element.removeAttribute(name === "className" ? "class" : name);
-}
-
-function setPropertyValue(element: Element, name: string, value: unknown): void {
-  if (name.toLowerCase().startsWith("on")) {
-    validateAttributeValue(element, name, "");
-  }
-
-  if (value === null || value === undefined || value === false) {
-    clearPropertyValue(element, name);
-    return;
-  }
-
-  const target = element as unknown as Record<string, unknown>;
-  if (name in target && !isSvgElement(element)) {
-    if (typeof value === "string") validateAttributeValue(element, name, value);
-    target[name] = value;
-    return;
-  }
-
-  setAttributeValue(element, name, value);
+  setDomAttribute(element, attr, value === true ? "true" : value);
 }
 
 function applyClassBinding(
@@ -754,7 +682,7 @@ function createPropsBinding(element: Element): (value: PropsBinding) => void {
       setAriaValue(element, name, item),
     );
     previousAttributes = syncNamedValues(previousAttributes, value.attributes, (name, item) =>
-      setAttributeValue(element, name, item),
+      setDomAttribute(element, name, item),
     );
 
     const seenProperties = new Set<string>();
@@ -776,17 +704,41 @@ function createPropsBinding(element: Element): (value: PropsBinding) => void {
         element.textContent =
           text === null || text === undefined || text === false ? "" : String(text);
       } else {
-        setPropertyValue(element, name, item);
+        setDomProperty(element, name, item);
       }
     }
 
     for (const name of previousProperties) {
       if (seenProperties.has(name)) continue;
       if (name === "textContent") element.textContent = "";
-      else clearPropertyValue(element, name);
+      else setDomProperty(element, name, undefined);
     }
     previousProperties = seenProperties;
   };
+}
+
+function bindDomValue(write: (element: Element, name: string, value: unknown) => void) {
+  function binding<TState>(name: string, store: StateSource<TState>): Action;
+  function binding<TState, TValue, TElement extends Element = Element>(
+    name: string,
+    store: StateSource<TState>,
+    selector: Selector<TState, TValue>,
+    equality?: Equality<TValue>,
+  ): Action<TElement>;
+  function binding<TState, TValue, TElement extends Element>(
+    name: string,
+    store: StateSource<TState>,
+    selector?: Selector<TState, TValue>,
+    equality?: Equality<TValue>,
+  ): Action<TElement> {
+    const select = selector ?? ((value: TState) => value as unknown as TValue);
+    return (element) => {
+      const sync = (value: TValue) => write(element, name, value);
+      sync(select(readState(store)));
+      return subscribeSelector(store, select, sync, equality);
+    };
+  }
+  return binding;
 }
 
 export const bind = {
@@ -806,18 +758,7 @@ export const bind = {
     };
   },
 
-  attr<TState, TValue>(
-    name: string,
-    store: StateSource<TState>,
-    selector: Selector<TState, TValue>,
-    equality?: Equality<TValue>,
-  ): Action<Element> {
-    return (element) => {
-      const sync = (value: TValue) => setAttributeValue(element, name, value);
-      sync(selector(readState(store)));
-      return subscribeSelector(store, selector, sync, equality);
-    };
-  },
+  attr: bindDomValue(setDomAttribute),
 
   class<TState>(
     name: string,
@@ -858,58 +799,13 @@ export const bind = {
     equality?: Equality<StyleBinding>,
   ): Action<HTMLElement | SVGElement> {
     return (element) => {
-      let previous = new Set<string>();
-      let previousWasString = false;
-      const sync = (value: StyleBinding) => {
-        if (typeof value === "string") {
-          assertSafeCssValue(value);
-          element.style.cssText = value;
-          previous = new Set();
-          previousWasString = true;
-          return;
-        }
-
-        if (previousWasString) {
-          element.style.cssText = "";
-          previousWasString = false;
-        }
-
-        const next = new Set<string>();
-        for (const [rawName, rawValue] of Object.entries(value)) {
-          const name = cssName(rawName);
-          next.add(name);
-          if (rawValue === null || rawValue === undefined) {
-            element.style.removeProperty(name);
-          } else {
-            const next = typeof rawValue === "number" ? String(rawValue) : rawValue;
-            assertSafeCssValue(next, name);
-            element.style.setProperty(name, next);
-          }
-        }
-        for (const name of previous) {
-          if (!next.has(name)) element.style.removeProperty(name);
-        }
-        previous = next;
-      };
+      const sync = createStyleBinding(element);
       sync(selector(readState(store)));
       return subscribeSelector(store, selector, sync, equality);
     };
   },
 
-  prop<TState, TValue, TElement extends Element = Element>(
-    name: string,
-    store: StateSource<TState>,
-    selector: Selector<TState, TValue>,
-    equality?: Equality<TValue>,
-  ): Action<TElement> {
-    return (element) => {
-      const sync = (value: TValue) => {
-        setPropertyValue(element, name, value);
-      };
-      sync(selector(readState(store)));
-      return subscribeSelector(store, selector, sync, equality);
-    };
-  },
+  prop: bindDomValue(setDomProperty),
 
   props<TState, TValue extends PropsBinding, TElement extends Element = Element>(
     store: StateSource<TState>,

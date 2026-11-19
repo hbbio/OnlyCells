@@ -1,4 +1,4 @@
-import { bind, text, type Action, type Child } from "@nodiffjs/core";
+import { bind, type Action, type Child } from "@nodiffjs/core";
 import { component } from "./cells";
 import { themeOptions, type PreferencesData } from "./schemas";
 import { preferences } from "./state";
@@ -71,7 +71,7 @@ export const CounterCard = component("CounterCard", (proxy) => {
       <div class="panel-heading">
         <div>
           <h2 class="panel-label">Counter</h2>
-          <strong class="counter-value">{text(count, (value) => value)}</strong>
+          <strong class="counter-value">{count}</strong>
         </div>
         <Badge>localStorage</Badge>
       </div>
@@ -113,16 +113,20 @@ export const ThemeCard = component("ThemeCard", (proxy) => {
   const previews = ["cupcake", "synthwave", "nord", "sunset"] as const;
   const selected = proxy.map([preferences], (state) => state.theme, "selected theme", true);
 
+  function setTheme(theme: PreferencesData["theme"]): void {
+    preferences.update((state) => ({ ...state, theme }));
+  }
+
   return (
     <article class="panel">
       <h2 class="panel-label">Appearance</h2>
       <label class="field">
         Theme
         <select
-          use={bind.prop("value", selected, (theme) => theme)}
+          use={bind.prop("value", selected)}
           onChange={(event) => {
             const theme = themeOptions.find((value) => value === event.currentTarget.value);
-            if (theme !== undefined) preferences.update((state) => ({ ...state, theme }));
+            if (theme !== undefined) setTheme(theme);
           }}
         >
           {themeOptions.map((theme) => (
@@ -131,9 +135,16 @@ export const ThemeCard = component("ThemeCard", (proxy) => {
         </select>
       </label>
 
-      <div class="theme-previews" aria-hidden="true">
+      <div class="theme-previews" role="group" aria-label="Theme previews">
         {previews.map((theme) => (
-          <div data-theme={theme} class="theme-swatch" />
+          <button
+            type="button"
+            data-theme={theme}
+            class="theme-swatch"
+            aria-label={themeLabel(theme)}
+            use={bind.aria("pressed", selected, (current) => String(current === theme))}
+            onClick={() => setTheme(theme)}
+          />
         ))}
       </div>
     </article>

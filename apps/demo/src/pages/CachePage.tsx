@@ -1,4 +1,4 @@
-import { text, view } from "@nodiffjs/core";
+import { view } from "@nodiffjs/core";
 import { component } from "../cells";
 import { PageHeader, SectionTitle, StatusMetric } from "../components";
 import { apiCache, appCache, auth } from "../state";
@@ -33,20 +33,20 @@ export const CachePage = component("CachePage", (proxy) => {
 
   return (
     <section class="page">
-      <PageHeader title="Inspectable cache state." actions={<CacheActions refresh={refresh} />}>
-        Preferences and HTTP snapshots share the same tiny cache format with expiry, tags, stale
-        reads, and schema validation at read time.
+      <PageHeader title="Inspectable local storage." actions={<CacheActions refresh={refresh} />}>
+        Cells save preferences. Cached HTTP responses have expiry, tags, stale reads, and schema
+        validation.
       </PageHeader>
 
       <section class="panel metrics">
         <StatusMetric
-          label="App cache"
-          value={text(inventory, (state) => state.keys.length)}
-          hint="Preferences snapshots."
+          label="Demo storage"
+          value={inventory.map(({ keys }) => keys.length, "storage keys", true)}
+          hint="Preferences and cached responses."
         />
         <StatusMetric
           label="HTTP cache"
-          value={text(inventory, (state) => state.httpCount)}
+          value={inventory.map(({ httpCount }) => httpCount, "HTTP cache entries", true)}
           hint="GET response envelopes with tags and TTL."
         />
       </section>

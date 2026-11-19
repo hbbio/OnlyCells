@@ -50,24 +50,39 @@ const defaultPreferences: PreferencesData = {
   step: 1,
 };
 
-const savedPreferences =
-  appCache.get("preferences", PreferencesSchema, { allowStale: true })?.value ?? defaultPreferences;
-
-export const preferences = sheet.new(savedPreferences, undefined, "preferences");
-
-preferences.subscribe((state) => {
-  if (state !== savedPreferences) appCache.set("preferences", state, { tags: ["preferences"] });
-  applyTheme(state.theme);
-});
-
-function applyTheme(theme: PreferencesData["theme"]): void {
-  if (theme === "system") {
-    document.documentElement.removeAttribute("data-theme");
-    return;
+function readStoredPreferences(raw: string): PreferencesData {
+  try {
+    const stored: unknown = JSON.parse(raw);
+    // Older demo builds wrapped preferences in a cache envelope.
+    const value = stored && typeof stored === "object" && "value" in stored ? stored.value : stored;
+    return PreferencesSchema.parse(value);
+  } catch {
+    return defaultPreferences;
   }
-
-  document.documentElement.dataset.theme = theme;
 }
+
+function createPreferences() {
+  const storageKey = appCache.fullKey("preferences");
+  let initial = defaultPreferences;
+  try {
+    const saved = localStorage.getItem(storageKey);
+    if (saved !== null) {
+      initial = readStoredPreferences(saved);
+      const normalized = JSON.stringify(initial);
+      if (saved !== normalized) localStorage.setItem(storageKey, normalized);
+    }
+  } catch {
+    return sheet.new(initial, undefined, "preferences");
+  }
+  return sheet.new(initial, undefined, "preferences", { _storageKey: storageKey });
+}
+
+export const preferences = createPreferences();
+
+preferences.subscribe(({ theme }) => {
+  if (theme === "system") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.dataset.theme = theme;
+});
 
 type DemoUser = { email: string; name: string };
 export const session = controllerCell<AuthState<DemoUser>>("session");

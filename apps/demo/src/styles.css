@@ -570,9 +570,20 @@ button[aria-current="page"]:enabled:hover {
   display: grid;
   place-items: center;
   aspect-ratio: 3 / 2;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 0.5rem;
   background: var(--canvas);
+  padding: 0;
+}
+
+.theme-swatch:enabled:hover {
+  border-color: var(--accent);
+  background: var(--canvas);
+}
+
+.theme-swatch[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .theme-swatch::before {
