@@ -1,27 +1,29 @@
-import { createRouter } from "@nodiffjs/core";
+import { bind, createRouter, type LinkProps, type RouterState } from "@nodiffjs/core";
+import { component, controllerCell } from "./cells";
 import { AuthPage } from "./pages/AuthPage";
 import { CachePage } from "./pages/CachePage";
 import { HomePage } from "./pages/HomePage";
 import { PostsPage } from "./pages/PostsPage";
 
-function NotFound() {
+const NotFound = component("NotFound", () => {
   return (
     <section class="notice" data-tone="danger">
       <h1>Not found</h1>
       <p>The current route is not registered.</p>
     </section>
   );
-}
+});
 
-function RouteError() {
+const RouteError = component("RouteError", () => {
   return (
     <section class="notice" data-tone="danger" role="alert">
       <h1>Route failed</h1>
       <p>The page could not render safely.</p>
     </section>
   );
-}
+});
 
+export const routeState = controllerCell<RouterState>("route");
 export const router = createRouter(
   [
     { path: "/", title: "NoDiff", component: HomePage },
@@ -31,22 +33,30 @@ export const router = createRouter(
   ],
   {
     mode: "hash",
+    cell: routeState,
     fallback: NotFound,
     error: RouteError,
   },
 );
 
-export function App() {
-  const Link = (props: Parameters<typeof router.Link>[0]) => router.Link(props);
+const Link = component("Link", (_proxy, props: LinkProps) => router.Link(props));
+
+export const App = component("App", (proxy) => {
+  const drawerOpen = proxy.new(false, "drawer open");
 
   return (
-    <div class="app-shell">
+    <div class="app-shell" use={() => router.start()}>
       <input
         id="app-drawer"
         type="checkbox"
         class="sidebar-toggle"
         aria-label="Show navigation"
         aria-controls="app-sidebar"
+        use={bind.checked(
+          drawerOpen,
+          (open) => open,
+          (checked) => checked,
+        )}
       />
       <header class="mobile-bar">
         <label for="app-drawer" class="menu-toggle">
@@ -100,4 +110,4 @@ export function App() {
       <main class="app-main">{router.outlet()}</main>
     </div>
   );
-}
+});

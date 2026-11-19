@@ -16,20 +16,26 @@ This package is designed for a fork-first monorepo workflow. In this repository,
 ```
 
 ```tsx
-import { catchRender, createCellStore, mount, text } from "@nodiffjs/core";
+import { catchRender, mount, text } from "@nodiffjs/core";
+import { Sheet } from "@okcontract/cells";
 
-const counter = createCellStore(() => ({ count: 0 }));
+const sheet = new Sheet();
+const counter = sheet.new(0);
 
 function App() {
   return (
-    <button onClick={() => counter.setState((state) => ({ count: state.count + 1 }))}>
-      Count: {text(counter, (state) => state.count)}
+    <button onClick={() => counter.update((count) => count + 1)}>
+      Count: {text(counter, (count) => count)}
     </button>
   );
 }
 
 mount("#app", catchRender({ render: App }));
 ```
+
+DOM bindings accept initialized Cells and `ReadableStore` sources. Give auth, resources, and
+routing a `cell` option to share an application sheet. Use `SheetProxy` for component-local and
+derived cells and call `destroy()` during component cleanup. [Cells proxy lifecycle](https://github.com/okcontract/cells#memory-management-and-proxies)
 
 ## Package Entries
 

@@ -11,14 +11,16 @@ NoDiff gives you JSX ergonomics, real DOM nodes, Cells-backed stores, schema-che
 The whole idea is small enough to keep in your head:
 
 ```tsx
-import { createCellStore, mount, text } from "@nodiffjs/core";
+import { mount, text } from "@nodiffjs/core";
+import { Sheet } from "@okcontract/cells";
 
-const counter = createCellStore(() => ({ count: 0 }));
+const sheet = new Sheet();
+const counter = sheet.new(0);
 
 function App() {
   return (
-    <button onClick={() => counter.setState((state) => ({ count: state.count + 1 }))}>
-      Count: {text(counter, (state) => state.count)}
+    <button onClick={() => counter.update((count) => count + 1)}>
+      Count: {text(counter, (count) => count)}
     </button>
   );
 }
@@ -132,7 +134,7 @@ You can read the code for those pieces in a few files.
 | DOM            | `mount`, `append`, direct node creation, events, refs, actions                    |
 | Lifecycle      | cleanup on unmount and region redraw                                              |
 | State bindings | `text`, `view`, `when`, `Show`, `list`, `For`, `ResourceView`, `Await`, `bind.*`  |
-| Stores         | `createCellStore` and bindings for the `ReadableStore` interface                  |
+| State          | Native Cells and bindings for the `ReadableStore` interface                       |
 | API client     | `fetch`, query params, JSON body handling, schema parsing, auth headers, 401 hook |
 | Cache          | localStorage envelopes with TTL, tags, stale reads, schema validation             |
 | Auth           | bearer token controller with a Cells-backed store and optional persistence        |
@@ -253,31 +255,28 @@ The demo is intentionally plain. It shows the framework surface without hiding i
 
 The API data comes from JSONPlaceholder. The app validates every post before it enters UI state.
 
+One `Sheet` owns the demo’s preferences, session, route, and resource state. Each component gets
+a `SheetProxy` for local state and derived cells. The demo’s `component` helper destroys the proxy
+on unmount and releases bindings created during a failed render. The cache inspector reads storage
+on mount and refresh and publishes the inventory to its local cell. [Demo Cells integration](apps/demo/src/cells.ts) · [Cells proxy lifecycle](https://github.com/okcontract/cells#memory-management-and-proxies)
+
 ## Tutorial: build the mental model
 
 This section walks through the app from zero to a useful screen.
 
-### 1. Create a store
+### 1. Create shared cells
 
-`createCellStore` keeps each snapshot in a cell. Read it with `getState()`, write it with
-`setState()`, and subscribe to changes with `subscribe()`. Bindings accept any store with this
-readable interface.
-
-```ts
-interface ReadableStore<T> {
-  getState(): T;
-  subscribe(listener: (state: T, previous: T) => void): () => void;
-}
-```
+Define app-wide state on the shared sheet. Write whole values with `set()` or derive a new value
+from the current one with `update()`.
 
 ```ts
-import { createCellStore } from "@nodiffjs/core";
+import { sheet } from "./cells";
 
-const preferences = createCellStore(() => ({
+const preferences = sheet.new({
   count: 0,
   search: "",
   theme: "system" as "system" | "light" | "dark",
-}));
+});
 ```
 
 ### 2. Render real DOM with TSX
@@ -285,16 +284,19 @@ const preferences = createCellStore(() => ({
 A component is just a function that returns a child value. A child can be a node, text, a fragment, an array, `null`, or another component result.
 
 ```tsx
-function HomePage() {
+import { component } from "./cells";
+
+const HomePage = component("HomePage", (proxy) => {
+  const count = proxy.map([preferences], (prefs) => prefs.count, "count", true);
   return (
     <section class="panel">
       <h1>Direct DOM TSX</h1>
-      <button onClick={() => preferences.setState((state) => ({ count: state.count + 1 }))}>
-        Increment
+      <button onClick={() => preferences.update((state) => ({ ...state, count: state.count + 1 }))}>
+        Count: {text(count, (value) => value)}
       </button>
     </section>
   );
-}
+});
 ```
 
 `onClick` becomes `addEventListener("click", ...)`. When the node is removed by `mount`, `view`, or another cleanup-aware path, the listener is removed too.
@@ -307,11 +309,11 @@ Use `text` when only a text node needs to change.
 <p>Count: {text(preferences, (state) => state.count)}</p>
 ```
 
-This creates one `Text` node and subscribes it to the store. When `count` changes, the node data changes. The surrounding paragraph stays in place.
+This creates one `Text` node and subscribes it to the cell. When `count` changes, the node data changes. The surrounding paragraph stays in place.
 
 ### 4. Bind form controls
 
-`bind.value` keeps an input and a store field in sync.
+`bind.value` keeps an input and a cell field in sync.
 
 ```tsx
 <input
@@ -679,6 +681,10 @@ compatibility, but new code should prefer `catchRender`.
 
 ### Store bindings
 
+The bindings accept initialized Cells and sources that implement `ReadableStore`. Use `null` as
+an explicit empty cell value. Two-way bindings merge plain record patches into writable cells and
+replace other values, including arrays.
+
 ```ts
 text(store, selector, format?, equality?);
 view(store, selector, render, options?);
@@ -693,14 +699,13 @@ effect(store, selector, run, equality?);
 subscribeSelector(store, selector, listener, equality?);
 ```
 
-Use `derivedStore` when UI state depends on multiple explicit stores:
+Use a component proxy for derived cells and `derivedStore` for `ReadableStore` inputs.
 
 ```ts
-const postsVm = derivedStore([posts.store, preferences], () => readPostsVm());
+const postsVm = proxy.map([postsState, preferences], readPostsVm, "posts view", true);
 ```
 
-It is a read-only store. Dependencies stay visible in the call site; there is no hidden dependency
-tracking.
+The map lists its dependencies and the component proxy owns the result.
 
 `bind` helpers:
 
@@ -829,7 +834,8 @@ auth.isExpired();
 auth.isAuthenticated();
 ```
 
-The auth controller exposes its Cells-backed store.
+Auth, resources, and the router accept a `cell` option. Each controller initializes its cell and
+publishes state changes to it. The auth controller also exposes a store interface.
 
 ```ts
 auth.store.getState();
@@ -904,26 +910,26 @@ Use `validatedSubmit` as a form action.
 
 ## Recipes
 
-### Persist a Cells-backed store
+### Persist preferences from a cell
 
 ```ts
-import { createCellStore, createLocalCache } from "@nodiffjs/core";
+import { createLocalCache } from "@nodiffjs/core";
+import { sheet } from "./cells";
 import { PreferencesSchema } from "./schemas";
 
 const cache = createLocalCache("app:");
 
-const saved = cache.get("preferences", PreferencesSchema, { allowStale: true })?.value;
-
-const preferences = createCellStore(() => ({
-  count: saved?.count ?? 0,
-  search: saved?.search ?? "",
-  postPage: saved?.postPage ?? 1,
-  theme: saved?.theme ?? "system",
-  step: saved?.step ?? 1,
-}));
+const initial = cache.get("preferences", PreferencesSchema, { allowStale: true })?.value ?? {
+  count: 0,
+  search: "",
+  postPage: 1,
+  theme: "system" as const,
+  step: 1,
+};
+const preferences = sheet.new(initial);
 
 preferences.subscribe((state) => {
-  cache.set("preferences", state, { tags: ["preferences"] });
+  if (state !== initial) cache.set("preferences", state, { tags: ["preferences"] });
 });
 ```
 
@@ -994,7 +1000,8 @@ For production history mode, configure your server to return `index.html` for ap
 
 ### TSX is only syntax
 
-There is no component instance model. A component call creates nodes. Persistent updates live in stores, actions, and resources.
+A component call creates nodes. The demo’s components own their local cells through `SheetProxy`
+and tie proxy cleanup to those nodes.
 
 ### DOM ownership is explicit
 

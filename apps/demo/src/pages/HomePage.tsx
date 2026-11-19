@@ -1,4 +1,5 @@
 import { bind, text } from "@nodiffjs/core";
+import { component } from "../cells";
 import {
   CounterCard,
   FeatureList,
@@ -7,9 +8,22 @@ import {
   StatusMetric,
   ThemeCard,
 } from "../components";
-import { auth, postsVm } from "../state";
+import { postsState, session } from "../state";
 
-export function HomePage() {
+export const HomePage = component("HomePage", (proxy) => {
+  const authSummary = proxy.map(
+    [session],
+    ({ status, token }) => ({ status, hasToken: token !== null }),
+    "auth summary",
+    true,
+  );
+  const postSummary = proxy.map(
+    [postsState],
+    ({ data, status, stale, loading }) => ({ total: data?.length ?? 0, status, stale, loading }),
+    "post summary",
+    true,
+  );
+
   return (
     <section class="page">
       <PageHeader hero title="TSX as browser syntax.">
@@ -28,21 +42,21 @@ export function HomePage() {
         <section class="panel metrics">
           <StatusMetric
             label="Auth"
-            value={text(auth.store, (state) => state.status)}
-            badge={text(auth.store, (state) => (state.token ? "token" : "guest"))}
+            value={text(authSummary, (state) => state.status)}
+            badge={text(authSummary, (state) => (state.hasToken ? "token" : "guest"))}
             hint="Bearer-token helper"
-            use={bind.classes(auth.store, (state) => ({
+            use={bind.classes(authSummary, (state) => ({
               "tone-success": state.status === "authenticated",
             }))}
           />
           <StatusMetric
             label="Posts"
-            value={text(postsVm, (state) => state.total)}
-            badge={text(postsVm, (state) => (state.loading ? "loading" : state.status))}
-            hint={text(postsVm, (state) =>
+            value={text(postSummary, (state) => state.total)}
+            badge={text(postSummary, (state) => (state.loading ? "loading" : state.status))}
+            hint={text(postSummary, (state) =>
               state.stale ? "Stale cache visible while refreshing" : "Validated API data",
             )}
-            use={bind.props(postsVm, (state) => ({
+            use={bind.props(postSummary, (state) => ({
               title: `${state.total} parsed posts in memory`,
               class: { "tone-warning": state.loading },
             }))}
@@ -61,7 +75,7 @@ export function HomePage() {
           items={[
             "Direct DOM JSX runtime",
             "Lifecycle cleanup through actions",
-            "Store bindings for text, attrs, classes, inputs",
+            "Cell bindings for text, attributes, classes, and inputs",
             "Hash or history router",
           ]}
         />
@@ -77,4 +91,4 @@ export function HomePage() {
       </section>
     </section>
   );
-}
+});

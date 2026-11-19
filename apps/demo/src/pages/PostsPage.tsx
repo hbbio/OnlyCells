@@ -1,45 +1,68 @@
-import { bind, For, ResourceView, safeErrorMessage, view } from "@nodiffjs/core";
+import {
+  bind,
+  For,
+  type ReadableCell,
+  ResourceView,
+  safeErrorMessage,
+  text,
+  view,
+  when,
+} from "@nodiffjs/core";
+import { component } from "../cells";
 import { Badge, PageHeader, SectionTitle } from "../components";
 import type { Post } from "../schemas";
-import {
-  apiCache,
-  posts,
-  postsVm,
-  preferences,
-  refreshCacheInspector,
-  type PostsVm,
-} from "../state";
+import { apiCache, posts, postsState, preferences, readPostsVm, type PostsVm } from "../state";
 
-function StatusLine(props: { state: PostsVm }) {
-  const state = props.state;
-  const updated = state.updatedAt ? new Date(state.updatedAt).toLocaleTimeString() : "never";
+type PostsModel = { model: ReadableCell<PostsVm> };
 
+const StatusLine = component("StatusLine", (_proxy, { model }: PostsModel) => {
   return (
-    <div class="status-line">
-      <Badge tone={state.error ? "danger" : state.loading ? "warning" : "success"}>
-        {state.loading ? "loading" : state.status}
+    <div class="status-line" id="posts-status">
+      <Badge
+        use={bind.dataset("tone", model, (state) =>
+          state.error ? "danger" : state.loading ? "warning" : "success",
+        )}
+      >
+        {text(model, (state) => (state.loading ? "loading" : state.status))}
       </Badge>
       <span>
-        {state.pageStart}-{state.pageEnd} of {state.filtered}
+        {text(model, (state) => `${state.pageStart}-${state.pageEnd} of ${state.filtered}`)}
       </span>
-      <span>{state.total} parsed</span>
-      <span>page {state.page}</span>
-      <span>updated {updated}</span>
-      {state.stale ? <Badge tone="warning">stale</Badge> : null}
-      {state.error ? <span class="tone-danger">{state.error}</span> : null}
+      <span>{text(model, (state) => state.total)} parsed</span>
+      <span>page {text(model, (state) => state.page)}</span>
+      <span>
+        updated{" "}
+        {text(model, (state) =>
+          state.updatedAt ? new Date(state.updatedAt).toLocaleTimeString() : "never",
+        )}
+      </span>
+      {when(
+        model,
+        (state) => state.stale,
+        () => (
+          <Badge tone="warning">stale</Badge>
+        ),
+      )}
+      {view(
+        model,
+        (state) => state.error,
+        (error) => (error ? <span class="tone-danger">{error}</span> : null),
+      )}
     </div>
   );
-}
+});
 
-function PostsToolbar() {
+const PostsToolbar = component("PostsToolbar", (proxy) => {
+  const refreshing = proxy.map([postsState], (state) => state.loading, "refreshing", true);
+
   return (
     <div class="button-group">
       <button
         class="button-primary"
-        use={bind.props(postsVm, (state) => ({
-          disabled: state.loading,
-          aria: { busy: state.loading },
-          title: state.loading ? "Refreshing validated posts" : "Refresh posts",
+        use={bind.props(refreshing, (loading) => ({
+          disabled: loading,
+          aria: { busy: loading },
+          title: loading ? "Refreshing validated posts" : "Refresh posts",
         }))}
         onClick={() => void posts.refresh()}
       >
@@ -48,7 +71,6 @@ function PostsToolbar() {
       <button
         onClick={() => {
           apiCache.remove("posts");
-          refreshCacheInspector();
           void posts.refresh();
         }}
       >
@@ -56,9 +78,9 @@ function PostsToolbar() {
       </button>
     </div>
   );
-}
+});
 
-function PostCard(props: { post: Post }) {
+const PostCard = component("PostCard", (_proxy, props: { post: Post }) => {
   const post = props.post;
   const reactions = post.id * 7 + post.userId;
   const replies = (post.id % 9) + 1;
@@ -91,13 +113,13 @@ function PostCard(props: { post: Post }) {
       </div>
     </article>
   );
-}
+});
 
-function PostsList() {
+const PostsList = component("PostsList", (_proxy, { model }: PostsModel) => {
   return (
     <div class="post-list">
       <For
-        store={postsVm}
+        store={model}
         each={(state) => state.visible}
         by={(post) => post.id}
         fallback={(state) =>
@@ -112,7 +134,7 @@ function PostsList() {
       </For>
     </div>
   );
-}
+});
 
 function pageNumbers(page: number, count: number): number[] {
   const length = Math.min(5, count);
@@ -120,15 +142,18 @@ function pageNumbers(page: number, count: number): number[] {
   return Array.from({ length }, (_, index) => start + index);
 }
 
-function PostsPagination() {
+const PostsPagination = component("PostsPagination", (_proxy, { model }: PostsModel) => {
   return view(
-    postsVm,
+    model,
     (state) => state,
     (state) => {
       if (state.pageCount <= 1) return null;
 
       const setPage = (page: number) =>
-        preferences.getState().setPostPage(Math.min(Math.max(1, page), state.pageCount));
+        preferences.update((prefs) => ({
+          ...prefs,
+          postPage: Math.min(Math.max(1, page), state.pageCount),
+        }));
 
       return (
         <nav class="pagination" aria-label="Post pages">
@@ -158,9 +183,11 @@ function PostsPagination() {
       );
     },
   );
-}
+});
 
-export function PostsPage() {
+export const PostsPage = component("PostsPage", (proxy) => {
+  const model = proxy.map([postsState, preferences], readPostsVm, "posts view", true);
+
   return (
     <section class="page">
       <PageHeader title="Parsed, cached, explicit." actions={<PostsToolbar />}>
@@ -175,25 +202,15 @@ export function PostsPage() {
           <input
             type="search"
             placeholder="Try album, photo, dolorem..."
-            use={[
-              bind.value(
-                preferences,
-                (state) => state.search,
-                (search) => ({ search, postPage: 1 }),
-              ),
-              bind.aria("describedby", preferences, () => "posts-status"),
-            ]}
+            aria-describedby="posts-status"
+            use={bind.value(
+              preferences,
+              (state) => state.search,
+              (search) => ({ search, postPage: 1 }),
+            )}
           />
         </label>
-        {view(
-          postsVm,
-          (state) => state,
-          (state) => (
-            <div id="posts-status">
-              <StatusLine state={state} />
-            </div>
-          ),
-        )}
+        <StatusLine model={model} />
       </fieldset>
 
       <SectionTitle title="Social feed">
@@ -201,7 +218,8 @@ export function PostsPage() {
       </SectionTitle>
 
       <ResourceView
-        resource={posts}
+        resource={postsState}
+        equality={(previous, next) => previous.data !== null && next.data !== null}
         pending={() => (
           <p class="notice" role="status">
             Loading posts...
@@ -216,11 +234,11 @@ export function PostsPage() {
       >
         {() => (
           <div class="page">
-            <PostsList />
-            <PostsPagination />
+            <PostsList model={model} />
+            <PostsPagination model={model} />
           </div>
         )}
       </ResourceView>
     </section>
   );
-}
+});

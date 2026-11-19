@@ -1,7 +1,13 @@
 import { type Action, type Child, type ElementProps, jsx } from "./dom.ts";
 import { safeErrorMessage, toError } from "./errors.ts";
 import { getSecurityPolicy } from "./security.ts";
-import { createCellStore, type CellStore, subscribeSelector, view } from "./store.ts";
+import {
+  createCellStore,
+  type CellStore,
+  subscribeSelector,
+  view,
+  type WritableCell,
+} from "./store.ts";
 
 export type RouteContext<TMeta = unknown> = {
   path: string;
@@ -30,6 +36,7 @@ export type RouterState<TMeta = unknown> = {
 
 export type RouterOptions<TMeta = unknown> = {
   mode?: "history" | "hash";
+  cell?: WritableCell<RouterState<TMeta>>;
   fallback?: (state: RouterState<TMeta>) => Child;
   error?: Child | ((error: Error, state: RouterState<TMeta>) => Child);
   onError?: (error: Error, state: RouterState<TMeta>) => void;
@@ -224,7 +231,8 @@ export function createRouter<TMeta = unknown>(
     return `${window.location.pathname}${window.location.search}`;
   };
 
-  const store = createCellStore<RouterState<TMeta>>(() => routeMatch(compiled, readPath()));
+  const store = createCellStore(() => routeMatch(compiled, readPath()), options.cell);
+  const source = options.cell ?? store;
 
   const sync = () => store.setState(routeMatch(compiled, readPath()), true);
 
@@ -269,7 +277,7 @@ export function createRouter<TMeta = unknown>(
     },
     outlet() {
       return view(
-        store,
+        source,
         (state) => state.path,
         (_path, state) => {
           const match = state.match;
@@ -305,7 +313,7 @@ export function createRouter<TMeta = unknown>(
             const select = (state: RouterState<TMeta>) => isActivePath(state, to, exact);
             const syncActive = (enabled: boolean) => element.classList.toggle(activeClass, enabled);
             syncActive(select(store.getState()));
-            return subscribeSelector(store, select, syncActive);
+            return subscribeSelector(source, select, syncActive);
           }
         : undefined;
 

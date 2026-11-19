@@ -1,4 +1,4 @@
-import { addCleanup, cleanupNode, replaceChildrenClean } from "./lifecycle.ts";
+import { addCleanup, cleanupNode, replaceChildrenClean, withRenderCleanup } from "./lifecycle.ts";
 import { safeErrorMessage, toError } from "./errors.ts";
 import { getSecurityPolicy } from "./security.ts";
 
@@ -837,7 +837,7 @@ function defaultErrorFallback(error: Error): HTMLElement {
 
 function renderWithBoundary(props: ErrorBoundaryHooks, render: () => Child): Child {
   try {
-    return render();
+    return withRenderCleanup(render);
   } catch (caught) {
     const error = toError(caught);
     props.onError?.(error);

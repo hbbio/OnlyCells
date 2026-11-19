@@ -1,4 +1,4 @@
-import { createCellStore, type CellStore } from "./store.ts";
+import { createCellStore, type CellStore, type WritableCell } from "./store.ts";
 
 export type ResourceStatus = "idle" | "loading" | "success" | "error";
 
@@ -17,6 +17,7 @@ export type ResourceContext = {
 
 type ResourceOptionsBase<T> = {
   initialData?: T | null;
+  cell?: WritableCell<ResourceState<T>>;
 };
 
 type OptionalArgsResourceOptions<T, TArgs> = ResourceOptionsBase<T> & {
@@ -64,14 +65,17 @@ export function createResource<T, TArgs = void>(
   options: ResourceOptions<T, TArgs>,
 ): Resource<T, TArgs> {
   const initialData = options.initialData ?? null;
-  const store = createCellStore<ResourceState<T>>(() => ({
-    status: initialData === null ? "idle" : "success",
-    data: initialData,
-    error: null,
-    updatedAt: initialData === null ? null : Date.now(),
-    loading: false,
-    stale: false,
-  }));
+  const store = createCellStore<ResourceState<T>>(
+    () => ({
+      status: initialData === null ? "idle" : "success",
+      data: initialData,
+      error: null,
+      updatedAt: initialData === null ? null : Date.now(),
+      loading: false,
+      stale: false,
+    }),
+    options.cell,
+  );
 
   const hasInitialArgs = hasOwn(options, "initialArgs");
   const initialArgs = hasInitialArgs ? (options as { initialArgs: TArgs }).initialArgs : undefined;

@@ -1,7 +1,7 @@
 import { isObject } from "@okcontract/cells";
 import { createLocalCache } from "./cache.ts";
 import { defineSchema, type Schema, ValidationError } from "./schema.ts";
-import { createCellStore } from "./store.ts";
+import { createCellStore, type WritableCell } from "./store.ts";
 
 export type AuthToken = {
   accessToken: string;
@@ -42,7 +42,7 @@ export type AuthOptions<TToken extends AuthToken> = {
 };
 
 export function createAuth<TUser = unknown, TToken extends AuthToken = AuthToken>(
-  options: AuthOptions<TToken> = {},
+  options: AuthOptions<TToken> & { cell?: WritableCell<AuthState<TUser, TToken>> } = {},
 ) {
   const storageKey = options.storageKey ?? "nodiff:auth";
   const schema = options.tokenSchema ?? (AuthTokenSchema as Schema<TToken>);
@@ -70,27 +70,30 @@ export function createAuth<TUser = unknown, TToken extends AuthToken = AuthToken
 
   const savedToken = persist ? readSavedToken() : null;
 
-  const store = createCellStore<AuthState<TUser, TToken>>((set) => ({
-    token: savedToken,
-    user: null,
-    status: savedToken ? "authenticated" : "anonymous",
-    setToken: (token, user) => {
-      if (persist && token.refreshToken && !options.allowRefreshTokenPersistence) {
-        throw new Error("Refusing to persist a refresh token without explicit opt-in.");
-      }
-      if (tokenExpired(token)) {
-        set({ token: null, user: null, status: "anonymous" });
-        return;
-      }
-      set((state) => ({
-        token,
-        user: user === undefined ? state.user : user,
-        status: "authenticated",
-      }));
-    },
-    setUser: (user) => set({ user }),
-    clear: () => set({ token: null, user: null, status: "anonymous" }),
-  }));
+  const store = createCellStore<AuthState<TUser, TToken>>(
+    (set) => ({
+      token: savedToken,
+      user: null,
+      status: savedToken ? "authenticated" : "anonymous",
+      setToken: (token, user) => {
+        if (persist && token.refreshToken && !options.allowRefreshTokenPersistence) {
+          throw new Error("Refusing to persist a refresh token without explicit opt-in.");
+        }
+        if (tokenExpired(token)) {
+          set({ token: null, user: null, status: "anonymous" });
+          return;
+        }
+        set((state) => ({
+          token,
+          user: user === undefined ? state.user : user,
+          status: "authenticated",
+        }));
+      },
+      setUser: (user) => set({ user }),
+      clear: () => set({ token: null, user: null, status: "anonymous" }),
+    }),
+    options.cell,
+  );
 
   if (persist) {
     store.subscribe((state, previous) => {

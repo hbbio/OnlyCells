@@ -1,3 +1,4 @@
+import { Sheet } from "@okcontract/cells";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { jsx, mount } from "../src/dom";
 import { configureSecurityPolicy } from "../src/security";
@@ -51,6 +52,49 @@ describe("bind helpers", () => {
     configureSecurityPolicy({});
     cleanupDom?.();
     cleanupDom = undefined;
+  });
+
+  test("updates native cell records and replaces native cell arrays", () => {
+    const sheet = new Sheet();
+    const preferences = sheet.new({ count: 1, label: "total" });
+    const selected = sheet.new<string[]>([]);
+    const unmount = mount("#app", [
+      jsx("input", {
+        type: "number",
+        use: bind.number(
+          preferences,
+          (state) => state.count,
+          (count) => ({ count: count ?? 0 }),
+        ),
+      }),
+      jsx("input", {
+        type: "checkbox",
+        value: "a",
+        use: bind.checkedGroup(
+          selected,
+          (values) => values,
+          (values) => values,
+        ),
+      }),
+    ]);
+
+    const number = document.querySelector<HTMLInputElement>('input[type="number"]')!;
+    const checkbox = document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    number.value = "3";
+    number.dispatchEvent(new Event("input"));
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event("change"));
+    expect(preferences.value).toEqual({ count: 3, label: "total" });
+    expect(selected.value).toEqual(["a"]);
+
+    preferences.apply((state) => {
+      state.count = 4;
+    });
+    expect(number.value).toBe("4");
+
+    unmount();
+    selected.set([]);
+    expect(checkbox.checked).toBe(true);
   });
 
   test("binds style, classes, dataset, aria, and properties", () => {

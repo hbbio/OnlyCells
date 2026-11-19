@@ -1,4 +1,4 @@
-import { Sheet } from "@okcontract/cells";
+import { isObject, Sheet } from "@okcontract/cells";
 import { addCleanup, clearBetween, removeNode } from "./lifecycle.ts";
 import {
   assertSafeCssValue,
@@ -20,39 +20,90 @@ export interface WritableStore<T> extends ReadableStore<T> {
   setState(partial: Partial<T> | T | ((state: T) => Partial<T> | T), replace?: boolean): void;
 }
 
+export interface ReadableCell<T> {
+  readonly value: T | undefined;
+  subscribe(listener: (value: T) => void): () => void;
+}
+
+export interface WritableCell<T> extends ReadableCell<T> {
+  set(value: NoInfer<T>): void | Promise<void>;
+}
+
+export type StateSource<T> = ReadableStore<T> | ReadableCell<T>;
+export type WritableStateSource<T> = WritableStore<T> | WritableCell<T>;
+
+function readState<T>(source: StateSource<T>): T {
+  if ("getState" in source) return source.getState();
+  const value = source.value;
+  if (value === undefined) throw new Error("Expected an initialized cell.");
+  return value;
+}
+
+function subscribeState<T>(source: StateSource<T>, listener: (value: T, previous: T) => void) {
+  if ("getState" in source) return source.subscribe(listener);
+  let previous = readState(source);
+  let subscribing = true;
+  const unsubscribe = source.subscribe((value) => {
+    if (subscribing && Object.is(previous, value)) return;
+    const old = previous;
+    previous = value;
+    listener(value, old);
+  });
+  subscribing = false;
+  return unsubscribe;
+}
+
+function mergeState<T>(state: T, patch: Partial<T> | T, replace?: boolean): T {
+  const replaceState = replace ?? (typeof patch !== "object" || patch === null);
+  return replaceState ? (patch as T) : Object.assign({}, state, patch);
+}
+
+function writeState<T>(source: WritableStateSource<T>, patch: Partial<T> | T): void {
+  if ("setState" in source) {
+    source.setState(patch);
+    return;
+  }
+  const current = readState(source);
+  source.set(isObject(current) && isObject(patch) ? { ...current, ...patch } : (patch as T));
+}
+
 export interface CellStore<T> extends WritableStore<T> {
   getInitialState(): T;
 }
 
 export function createCellStore<T>(
   initialize: (set: WritableStore<T>["setState"]) => T,
+  cell?: WritableCell<T>,
 ): CellStore<T> {
-  // Box snapshots so every state is an ordinary, defined cell value.
-  const initial = { state: initialize(setState) };
-  const cell = new Sheet(Object.is).new(initial);
-  const snapshot = () => cell.value ?? initial;
+  const initial = initialize(setState);
+  // The compatibility store can hold values that Cells would interpret as pending work or pointers.
+  const storage = cell
+    ? { kind: "native" as const, cell }
+    : { kind: "boxed" as const, cell: new Sheet(Object.is).new({ state: initial }) };
+  if (storage.kind === "native") storage.cell.set(initial);
+
+  function getState(): T {
+    return storage.kind === "boxed" ? readState(storage.cell).state : readState(storage.cell);
+  }
 
   function setState(partial: Partial<T> | T | ((state: T) => Partial<T> | T), replace?: boolean) {
-    const { state } = snapshot();
+    const state = getState();
     const next =
       typeof partial === "function" ? (partial as (state: T) => Partial<T> | T)(state) : partial;
     if (Object.is(state, next)) return;
-    const replaceState = replace ?? (typeof next !== "object" || next === null);
-    cell.set({ state: replaceState ? (next as T) : Object.assign({}, state, next) });
+    const snapshot = mergeState(state, next, replace);
+    if (storage.kind === "boxed") storage.cell.set({ state: snapshot });
+    else storage.cell.set(snapshot);
   }
 
   return {
-    getState: () => snapshot().state,
-    getInitialState: () => initial.state,
+    getState,
+    getInitialState: () => initial,
     setState,
     subscribe(listener) {
-      let previous = snapshot();
-      return cell.subscribe((current) => {
-        if (current === previous) return;
-        const old = previous.state;
-        previous = current;
-        listener(current.state, old);
-      });
+      return storage.kind === "boxed"
+        ? subscribeState(storage.cell, (value, previous) => listener(value.state, previous.state))
+        : subscribeState(storage.cell, listener);
     },
   };
 }
@@ -77,14 +128,14 @@ export type StoreStates<TStores extends readonly ReadableStore<unknown>[]> = {
 };
 
 export function subscribeSelector<TState, TValue>(
-  store: ReadableStore<TState>,
+  store: StateSource<TState>,
   selector: Selector<TState, TValue>,
   listener: (value: TValue, previousValue: TValue, state: TState, previousState: TState) => void,
   equality: Equality<TValue> = Object.is,
 ): () => void {
-  let current = selector(store.getState());
+  let current = selector(readState(store));
 
-  return store.subscribe((state, previousState) => {
+  return subscribeState(store, (state, previousState) => {
     const next = selector(state);
     if (equality(current, next)) return;
     const previous = current;
@@ -151,15 +202,15 @@ export function derivedStore<const TStores extends readonly ReadableStore<unknow
 }
 
 export function effect<TState, TValue>(
-  store: ReadableStore<TState>,
+  store: StateSource<TState>,
   selector: Selector<TState, TValue>,
   run: (value: TValue, previousValue: TValue | undefined, state: TState) => void,
   equality?: Equality<TValue>,
 ): Action {
   return (element) => {
     let previous: TValue | undefined;
-    const initial = selector(store.getState());
-    run(initial, previous, store.getState());
+    const initial = selector(readState(store));
+    run(initial, previous, readState(store));
     previous = initial;
 
     const unsubscribe = subscribeSelector(
@@ -178,13 +229,13 @@ export function effect<TState, TValue>(
 }
 
 export function text<TState, TValue>(
-  store: ReadableStore<TState>,
+  store: StateSource<TState>,
   selector: Selector<TState, TValue>,
   format: (value: TValue) => string = (value) =>
     value === null || value === undefined ? "" : String(value),
   equality?: Equality<TValue>,
 ): Text {
-  const node = document.createTextNode(format(selector(store.getState())));
+  const node = document.createTextNode(format(selector(readState(store))));
   const unsubscribe = subscribeSelector(
     store,
     selector,
@@ -198,7 +249,7 @@ export function text<TState, TValue>(
 }
 
 export function view<TState, TValue>(
-  store: ReadableStore<TState>,
+  store: StateSource<TState>,
   selector: Selector<TState, TValue>,
   render: (value: TValue, state: TState) => Child,
   options: { equality?: Equality<TValue> } = {},
@@ -216,7 +267,7 @@ export function view<TState, TValue>(
     }
   };
 
-  draw(selector(store.getState()), store.getState());
+  draw(selector(readState(store)), readState(store));
 
   const unsubscribe = subscribeSelector(
     store,
@@ -234,7 +285,7 @@ export function view<TState, TValue>(
 }
 
 export function when<TState>(
-  store: ReadableStore<TState>,
+  store: StateSource<TState>,
   predicate: Selector<TState, boolean>,
   yes: (state: TState) => Child,
   no?: (state: TState) => Child,
@@ -243,7 +294,7 @@ export function when<TState>(
 }
 
 export type ShowProps<TState, TValue> = {
-  store: ReadableStore<TState>;
+  store: StateSource<TState>;
   when: Selector<TState, TValue>;
   children: Child | ((value: NonNullable<TValue>, state: TState) => Child);
   fallback?: Child | ((state: TState, value: TValue) => Child);
@@ -280,7 +331,7 @@ export function Show<TState, TValue>(props: ShowProps<TState, TValue>): Document
   );
 }
 
-export type ResourceStore<T> = ReadableStore<ResourceState<T>>;
+export type ResourceStore<T> = StateSource<ResourceState<T>>;
 export type ResourceLike<T> = ResourceStore<T> | { store: ResourceStore<T> };
 
 export type ResourceViewProps<T> = {
@@ -334,7 +385,7 @@ export function Await<T>(props: ResourceViewProps<T>): DocumentFragment {
 }
 
 export function list<TState, TItem>(
-  store: ReadableStore<TState>,
+  store: StateSource<TState>,
   selector: Selector<TState, readonly TItem[]>,
   render: (item: TItem, index: number, items: readonly TItem[]) => Child,
   options: { equality?: Equality<readonly TItem[]> } = {},
@@ -348,7 +399,7 @@ export function list<TState, TItem>(
 }
 
 export type ForProps<TState, TItem, TKey = unknown> = {
-  store: ReadableStore<TState>;
+  store: StateSource<TState>;
   each: Selector<TState, readonly TItem[]>;
   by: (item: TItem, index: number, items: readonly TItem[]) => TKey;
   children: (item: TItem, index: number, items: readonly TItem[]) => Child;
@@ -464,7 +515,7 @@ export function For<TState, TItem, TKey = unknown>(
     rows = nextRows;
   };
 
-  draw(props.each(props.store.getState()), props.store.getState());
+  draw(props.each(readState(props.store)), readState(props.store));
 
   const unsubscribe = subscribeSelector(
     props.store,
@@ -740,7 +791,7 @@ function createPropsBinding(element: Element): (value: PropsBinding) => void {
 
 export const bind = {
   text<TState, TValue>(
-    store: ReadableStore<TState>,
+    store: StateSource<TState>,
     selector: Selector<TState, TValue>,
     format: (value: TValue) => string = (value) =>
       value === null || value === undefined ? "" : String(value),
@@ -750,39 +801,39 @@ export const bind = {
       const sync = (value: TValue) => {
         element.textContent = format(value);
       };
-      sync(selector(store.getState()));
+      sync(selector(readState(store)));
       return subscribeSelector(store, selector, sync, equality);
     };
   },
 
   attr<TState, TValue>(
     name: string,
-    store: ReadableStore<TState>,
+    store: StateSource<TState>,
     selector: Selector<TState, TValue>,
     equality?: Equality<TValue>,
   ): Action<Element> {
     return (element) => {
       const sync = (value: TValue) => setAttributeValue(element, name, value);
-      sync(selector(store.getState()));
+      sync(selector(readState(store)));
       return subscribeSelector(store, selector, sync, equality);
     };
   },
 
   class<TState>(
     name: string,
-    store: ReadableStore<TState>,
+    store: StateSource<TState>,
     selector: Selector<TState, boolean>,
     equality?: Equality<boolean>,
   ): Action<Element> {
     return (element) => {
       const sync = (enabled: boolean) => element.classList.toggle(name, enabled);
-      sync(selector(store.getState()));
+      sync(selector(readState(store)));
       return subscribeSelector(store, selector, sync, equality);
     };
   },
 
   classes<TState>(
-    store: ReadableStore<TState>,
+    store: StateSource<TState>,
     selector: Selector<TState, ClassBinding>,
     equality?: Equality<ClassBinding>,
   ): Action<Element> {
@@ -796,13 +847,13 @@ export const bind = {
         for (const name of next) element.classList.add(name);
         previous = next;
       };
-      sync(selector(store.getState()));
+      sync(selector(readState(store)));
       return subscribeSelector(store, selector, sync, equality);
     };
   },
 
   style<TState>(
-    store: ReadableStore<TState>,
+    store: StateSource<TState>,
     selector: Selector<TState, StyleBinding>,
     equality?: Equality<StyleBinding>,
   ): Action<HTMLElement | SVGElement> {
@@ -840,14 +891,14 @@ export const bind = {
         }
         previous = next;
       };
-      sync(selector(store.getState()));
+      sync(selector(readState(store)));
       return subscribeSelector(store, selector, sync, equality);
     };
   },
 
   prop<TState, TValue, TElement extends Element = Element>(
     name: string,
-    store: ReadableStore<TState>,
+    store: StateSource<TState>,
     selector: Selector<TState, TValue>,
     equality?: Equality<TValue>,
   ): Action<TElement> {
@@ -855,53 +906,53 @@ export const bind = {
       const sync = (value: TValue) => {
         setPropertyValue(element, name, value);
       };
-      sync(selector(store.getState()));
+      sync(selector(readState(store)));
       return subscribeSelector(store, selector, sync, equality);
     };
   },
 
   props<TState, TValue extends PropsBinding, TElement extends Element = Element>(
-    store: ReadableStore<TState>,
+    store: StateSource<TState>,
     selector: Selector<TState, TValue>,
     equality?: Equality<TValue>,
   ): Action<TElement> {
     return (element) => {
       const sync = createPropsBinding(element);
-      sync(selector(store.getState()));
+      sync(selector(readState(store)));
       return subscribeSelector(store, selector, sync, equality);
     };
   },
 
   dataset<TState>(
     name: string,
-    store: ReadableStore<TState>,
+    store: StateSource<TState>,
     selector: Selector<TState, string | number | boolean | null | undefined>,
     equality?: Equality<string | number | boolean | null | undefined>,
   ): Action<HTMLElement> {
     return (element) => {
       const sync = (value: string | number | boolean | null | undefined) =>
         setDatasetValue(element, name, value);
-      sync(selector(store.getState()));
+      sync(selector(readState(store)));
       return subscribeSelector(store, selector, sync, equality);
     };
   },
 
   aria<TState>(
     name: string,
-    store: ReadableStore<TState>,
+    store: StateSource<TState>,
     selector: Selector<TState, string | number | boolean | null | undefined>,
     equality?: Equality<string | number | boolean | null | undefined>,
   ): Action<Element> {
     return (element) => {
       const sync = (value: string | number | boolean | null | undefined) =>
         setAriaValue(element, name, value);
-      sync(selector(store.getState()));
+      sync(selector(readState(store)));
       return subscribeSelector(store, selector, sync, equality);
     };
   },
 
   value<TState, TValue>(
-    store: WritableStore<TState>,
+    store: WritableStateSource<TState>,
     selector: Selector<TState, TValue>,
     commit: (value: string, state: TState) => Partial<TState> | TState | void,
     options: {
@@ -918,12 +969,12 @@ export const bind = {
         const next = format(value);
         if (element.value !== next) element.value = next;
       };
-      sync(selector(store.getState()));
+      sync(selector(readState(store)));
       const unsubscribe = subscribeSelector(store, selector, sync, options.equality);
       const eventName = options.event ?? "input";
       const handler = () => {
-        const patch = commit(element.value, store.getState());
-        if (patch !== undefined) store.setState(patch);
+        const patch = commit(element.value, readState(store));
+        if (patch !== undefined) writeState(store, patch);
       };
       element.addEventListener(eventName, handler);
       return () => {
@@ -934,7 +985,7 @@ export const bind = {
   },
 
   checked<TState>(
-    store: WritableStore<TState>,
+    store: WritableStateSource<TState>,
     selector: Selector<TState, boolean>,
     commit: (checked: boolean, state: TState) => Partial<TState> | TState | void,
     equality?: Equality<boolean>,
@@ -943,11 +994,11 @@ export const bind = {
       const sync = (checked: boolean) => {
         if (element.checked !== checked) element.checked = checked;
       };
-      sync(selector(store.getState()));
+      sync(selector(readState(store)));
       const unsubscribe = subscribeSelector(store, selector, sync, equality);
       const handler = () => {
-        const patch = commit(element.checked, store.getState());
-        if (patch !== undefined) store.setState(patch);
+        const patch = commit(element.checked, readState(store));
+        if (patch !== undefined) writeState(store, patch);
       };
       element.addEventListener("change", handler);
       return () => {
@@ -958,7 +1009,7 @@ export const bind = {
   },
 
   number<TState, TValue>(
-    store: WritableStore<TState>,
+    store: WritableStateSource<TState>,
     selector: Selector<TState, TValue>,
     commit: (value: number | null, state: TState) => Partial<TState> | TState | void,
     options: {
@@ -975,14 +1026,14 @@ export const bind = {
         const next = format(value);
         if (element.value !== next) element.value = next;
       };
-      sync(selector(store.getState()));
+      sync(selector(readState(store)));
       const unsubscribe = subscribeSelector(store, selector, sync, options.equality);
       const eventName = options.event ?? "input";
       const handler = () => {
         const raw = element.value.trim();
         const next = raw === "" ? null : Number(raw);
-        const patch = commit(Number.isNaN(next) ? null : next, store.getState());
-        if (patch !== undefined) store.setState(patch);
+        const patch = commit(Number.isNaN(next) ? null : next, readState(store));
+        if (patch !== undefined) writeState(store, patch);
       };
       element.addEventListener(eventName, handler);
       return () => {
@@ -993,7 +1044,7 @@ export const bind = {
   },
 
   checkedGroup<TState, TValue extends string = string>(
-    store: WritableStore<TState>,
+    store: WritableStateSource<TState>,
     selector: Selector<TState, readonly TValue[]>,
     commit: (values: TValue[], state: TState) => Partial<TState> | TState | void,
     options: {
@@ -1006,15 +1057,15 @@ export const bind = {
       const sync = (values: readonly TValue[]) => {
         element.checked = values.includes(readValue());
       };
-      sync(selector(store.getState()));
+      sync(selector(readState(store)));
       const unsubscribe = subscribeSelector(store, selector, sync, options.equality);
       const handler = () => {
-        const selected = new Set(selector(store.getState()));
+        const selected = new Set(selector(readState(store)));
         const value = readValue();
         if (element.checked) selected.add(value);
         else selected.delete(value);
-        const patch = commit(Array.from(selected), store.getState());
-        if (patch !== undefined) store.setState(patch);
+        const patch = commit(Array.from(selected), readState(store));
+        if (patch !== undefined) writeState(store, patch);
       };
       element.addEventListener("change", handler);
       return () => {
@@ -1025,7 +1076,7 @@ export const bind = {
   },
 
   radio<TState, TValue extends string | number | boolean = string>(
-    store: WritableStore<TState>,
+    store: WritableStateSource<TState>,
     selector: Selector<TState, TValue>,
     commit: (value: TValue, state: TState) => Partial<TState> | TState | void,
     options: {
@@ -1038,12 +1089,12 @@ export const bind = {
       const sync = (value: TValue) => {
         element.checked = Object.is(value, readValue());
       };
-      sync(selector(store.getState()));
+      sync(selector(readState(store)));
       const unsubscribe = subscribeSelector(store, selector, sync, options.equality);
       const handler = () => {
         if (!element.checked) return;
-        const patch = commit(readValue(), store.getState());
-        if (patch !== undefined) store.setState(patch);
+        const patch = commit(readValue(), readState(store));
+        if (patch !== undefined) writeState(store, patch);
       };
       element.addEventListener("change", handler);
       return () => {
@@ -1054,7 +1105,7 @@ export const bind = {
   },
 
   selected<TState, TValue extends string = string>(
-    store: WritableStore<TState>,
+    store: WritableStateSource<TState>,
     selector: Selector<TState, readonly TValue[]>,
     commit: (values: TValue[], state: TState) => Partial<TState> | TState | void,
     equality?: Equality<readonly TValue[]>,
@@ -1066,14 +1117,14 @@ export const bind = {
           option.selected = selected.has(option.value);
         }
       };
-      sync(selector(store.getState()));
+      sync(selector(readState(store)));
       const unsubscribe = subscribeSelector(store, selector, sync, equality);
       const handler = () => {
         const values = Array.from(element.options)
           .filter((option) => option.selected)
           .map((option) => option.value as TValue);
-        const patch = commit(values, store.getState());
-        if (patch !== undefined) store.setState(patch);
+        const patch = commit(values, readState(store));
+        if (patch !== undefined) writeState(store, patch);
       };
       element.addEventListener("change", handler);
       return () => {
@@ -1084,13 +1135,13 @@ export const bind = {
   },
 
   files<TState>(
-    store: WritableStore<TState>,
+    store: WritableStateSource<TState>,
     commit: (files: FileList | null, state: TState) => Partial<TState> | TState | void,
   ): Action<HTMLInputElement> {
     return (element) => {
       const handler = () => {
-        const patch = commit(element.files, store.getState());
-        if (patch !== undefined) store.setState(patch);
+        const patch = commit(element.files, readState(store));
+        if (patch !== undefined) writeState(store, patch);
       };
       element.addEventListener("change", handler);
       return () => element.removeEventListener("change", handler);

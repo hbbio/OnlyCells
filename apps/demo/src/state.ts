@@ -1,16 +1,17 @@
 import {
+  type AuthState,
   configureSecurityPolicy,
   cookieSessionRequest,
   createApi,
   createAuth,
-  createCellStore,
   createLocalCache,
   createResource,
-  derivedStore,
   readCsrfToken,
+  type ResourceState,
   safeErrorMessage,
   type SecurityViolation,
 } from "@nodiffjs/core";
+import { controllerCell, sheet } from "./cells";
 import {
   type LoginValues,
   type Post,
@@ -41,15 +42,6 @@ export const securityPolicy = configureSecurityPolicy({
 export const appCache = createLocalCache("demo:");
 export const apiCache = createLocalCache("demo:http:");
 
-export type PreferencesState = PreferencesData & {
-  increment(): void;
-  resetCount(): void;
-  setSearch(search: string): void;
-  setPostPage(page: number): void;
-  setTheme(theme: PreferencesData["theme"]): void;
-  setStep(step: number): void;
-};
-
 const defaultPreferences: PreferencesData = {
   count: 0,
   search: "",
@@ -61,28 +53,10 @@ const defaultPreferences: PreferencesData = {
 const savedPreferences =
   appCache.get("preferences", PreferencesSchema, { allowStale: true })?.value ?? defaultPreferences;
 
-export const preferences = createCellStore<PreferencesState>((set) => ({
-  ...savedPreferences,
-  increment: () => set((state) => ({ count: state.count + state.step })),
-  resetCount: () => set({ count: 0 }),
-  setSearch: (search) => set({ search, postPage: 1 }),
-  setPostPage: (postPage) => set({ postPage: Math.max(1, Math.trunc(postPage)) }),
-  setTheme: (theme) => set({ theme }),
-  setStep: (step) => set({ step }),
-}));
-
-function preferenceSnapshot(state: PreferencesState): PreferencesData {
-  return {
-    count: state.count,
-    search: state.search,
-    postPage: state.postPage,
-    theme: state.theme,
-    step: state.step,
-  };
-}
+export const preferences = sheet.new(savedPreferences, undefined, "preferences");
 
 preferences.subscribe((state) => {
-  appCache.set("preferences", preferenceSnapshot(state), { tags: ["preferences"] });
+  if (state !== savedPreferences) appCache.set("preferences", state, { tags: ["preferences"] });
   applyTheme(state.theme);
 });
 
@@ -95,9 +69,9 @@ function applyTheme(theme: PreferencesData["theme"]): void {
   document.documentElement.dataset.theme = theme;
 }
 
-applyTheme(preferences.getState().theme);
-
-export const auth = createAuth<{ email: string; name: string }>();
+type DemoUser = { email: string; name: string };
+export const session = controllerCell<AuthState<DemoUser>>("session");
+export const auth = createAuth<DemoUser>({ cell: session });
 
 export function readDemoCsrfToken(): string | null {
   return readCsrfToken({ token: demoCsrfToken });
@@ -122,7 +96,9 @@ export const sessionApi = createApi({
 
 export const demoCookieSessionRequest = cookieSessionRequest();
 
+export const postsState = controllerCell<ResourceState<Post[]>>("posts");
 export const posts = createResource<Post[]>({
+  cell: postsState,
   immediate: true,
   load: (_args, { signal }) =>
     publicApi.get("/posts", {
@@ -155,9 +131,7 @@ export type PostsVm = {
   visible: Post[];
 };
 
-export function readPostsVm(): PostsVm {
-  const resource = posts.store.getState();
-  const prefs = preferences.getState();
+export function readPostsVm(resource: ResourceState<Post[]>, prefs: PreferencesData): PostsVm {
   const search = prefs.search.trim().toLowerCase();
   const all = resource.data ?? [];
   const filtered = search
@@ -187,12 +161,6 @@ export function readPostsVm(): PostsVm {
     visible,
   };
 }
-
-export const postsVm = derivedStore([posts.store, preferences], readPostsVm);
-
-export const cacheInspector = createCellStore(() => ({ version: 0 }));
-export const refreshCacheInspector = () =>
-  cacheInspector.setState((state) => ({ version: state.version + 1 }));
 
 export async function fakeLogin(values: LoginValues): Promise<void> {
   const name = values.email.split("@")[0] || "demo-user";

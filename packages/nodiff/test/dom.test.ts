@@ -339,11 +339,14 @@ describe("DOM runtime", () => {
       onViolation: (violation) => violations.push(violation),
     });
     const secretError = new Error("database password=secret-token");
+    const store = createCellStore(() => ({ label: "initial" }));
+    let abandoned: Text | undefined;
 
     const unmount = mount(
       "#app",
       catchRender({
         render: () => {
+          abandoned = text(store, (state) => state.label);
           throw secretError;
         },
         onError: (error) => seen.push(error.message),
@@ -353,6 +356,8 @@ describe("DOM runtime", () => {
     const textContent = document.querySelector("#app")?.textContent ?? "";
     expect(textContent).toBe("Something went wrong.");
     expect(textContent).not.toContain("secret-token");
+    store.setState({ label: "updated" });
+    expect(abandoned?.data).toBe("initial");
     expect(seen).toEqual(["database password=secret-token"]);
     expect(violations).toEqual([
       {
