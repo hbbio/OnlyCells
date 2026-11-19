@@ -534,22 +534,45 @@ function checkedDomName(name: string, value?: string): string {
   return normalized;
 }
 
+function hasNativeDomSetter(element: Element, name: string): boolean {
+  for (let owner: object | null = element; owner; owner = Object.getPrototypeOf(owner)) {
+    const property = Object.getOwnPropertyDescriptor(owner, name);
+    if (!property) continue;
+    if (owner === element || !property.set) return false;
+
+    const constructor: unknown = Object.getOwnPropertyDescriptor(owner, "constructor")?.value;
+    if (
+      typeof constructor !== "function" ||
+      !/^(?:Element|HTML\w*Element|MathMLElement)$/.test(constructor.name)
+    ) {
+      return false;
+    }
+
+    // Web IDL prototypes carry their interface name even when the element changes documents.
+    const tag = Object.getOwnPropertyDescriptor(owner, Symbol.toStringTag)?.value;
+    const view = element.ownerDocument.defaultView as (Window & Record<string, unknown>) | null;
+    return tag === constructor.name || view?.[constructor.name] === constructor;
+  }
+  return false;
+}
+
 function checkedSinkString(element: Element, name: string, value: unknown): string | undefined {
-  if (singleUrlAttributes.has(name)) return safeUrlAttributeValue(element, name, String(value));
-  if (urlListAttributes.has(name)) {
-    const text = String(value);
-    validateSrcsetAttributeValue(element, name, text);
-    return text;
-  }
-  if (cssAttributes.has(name)) {
-    const text = String(value);
-    assertSafeCssValue(text, "style attribute");
-    return text;
-  }
+  const normalized = checkedDomName(name, typeof value === "string" ? value : undefined);
+  const singleUrl = singleUrlAttributes.has(normalized);
+  const urlList = urlListAttributes.has(normalized);
+  const css = cssAttributes.has(normalized);
+  if (!singleUrl && !urlList && !css) return;
+  if (typeof value !== "string" && !hasNativeDomSetter(element, name)) return;
+
+  const text = String(value);
+  if (singleUrl) return safeUrlAttributeValue(element, normalized, text);
+  if (urlList) validateSrcsetAttributeValue(element, normalized, text);
+  if (css) assertSafeCssValue(text, "style attribute");
+  return text;
 }
 
 export function validateAttributeValue(element: Element, name: string, value: string): void {
-  checkedSinkString(element, checkedDomName(name, value), value);
+  checkedSinkString(element, name, value);
 }
 
 function assertSafeElementType(type: string): void {
@@ -675,9 +698,8 @@ export function setDomProperty(
     return;
   }
 
-  const normalized = checkedDomName(name, typeof value === "string" ? value : undefined);
   // Use the checked string for any property whose setter would coerce the value.
-  const next = checkedSinkString(element, normalized, value) ?? value;
+  const next = checkedSinkString(element, name, value) ?? value;
   try {
     target[name] = next;
   } catch (error) {

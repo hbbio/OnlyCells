@@ -157,6 +157,30 @@ describe("DOM sink matrix", () => {
     }
   }
 
+  test("preserves objects passed to custom element setters", () => {
+    class FilePreview extends HTMLElement {
+      file: File | undefined;
+
+      set src(file: File) {
+        this.file = file;
+      }
+    }
+    window.customElements.define("file-preview", FilePreview);
+
+    const first = new File(["first"], "first.txt");
+    const second = new File(["second"], "second.txt");
+    const preview = jsx("file-preview", { src: first }) as FilePreview;
+    const source = new Sheet().new({ file: first });
+    const bound = jsx("file-preview", {
+      use: bind.prop("src", source, (state) => state.file),
+    }) as FilePreview;
+
+    expect(preview.file).toBe(first);
+    expect(bound.file).toBe(first);
+    source.set({ file: second });
+    expect(bound.file).toBe(second);
+  });
+
   test("validates coerced URL properties on Cell updates", () => {
     const violations: SecurityViolation[] = [];
     configureSecurityPolicy({
