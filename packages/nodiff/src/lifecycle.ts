@@ -1,30 +1,64 @@
 export type Cleanup = () => void;
 
-const cleanupMap = new WeakMap<Node, Cleanup[]>();
+type CleanupEntry = { node: Node; cleanup: Cleanup };
+
+const cleanupMap = new WeakMap<Node, CleanupEntry[]>();
+let renderCleanups: CleanupEntry[] | undefined;
 
 export function addCleanup(node: Node, cleanup: void | Cleanup | null | undefined): void {
   if (typeof cleanup !== "function") return;
+  const entry = { node, cleanup };
   const existing = cleanupMap.get(node);
   if (existing) {
-    existing.push(cleanup);
-    return;
+    existing.push(entry);
+  } else {
+    cleanupMap.set(node, [entry]);
   }
-  cleanupMap.set(node, [cleanup]);
+  renderCleanups?.push(entry);
+}
+
+function runCleanup(cleanup: Cleanup): void {
+  try {
+    cleanup();
+  } catch (error) {
+    queueMicrotask(() => {
+      throw error;
+    });
+  }
+}
+
+/** Runs cleanups registered during a synchronous render if that render throws. */
+export function withRenderCleanup<T>(render: () => T): T {
+  const outer = renderCleanups;
+  const entries = outer ?? [];
+  const start = entries.length;
+  renderCleanups = entries;
+
+  let complete = false;
+  try {
+    const result = render();
+    complete = true;
+    return result;
+  } finally {
+    renderCleanups = outer;
+    if (!complete) {
+      for (const entry of entries.splice(start).reverse()) {
+        const own = cleanupMap.get(entry.node);
+        const index = own?.indexOf(entry) ?? -1;
+        if (!own || index === -1) continue;
+        own.splice(index, 1);
+        if (own.length === 0) cleanupMap.delete(entry.node);
+        runCleanup(entry.cleanup);
+      }
+    }
+  }
 }
 
 export function cleanupNode(node: Node): void {
   const own = cleanupMap.get(node);
   if (own) {
     cleanupMap.delete(node);
-    for (let i = own.length - 1; i >= 0; i -= 1) {
-      try {
-        own[i]?.();
-      } catch (error) {
-        queueMicrotask(() => {
-          throw error;
-        });
-      }
-    }
+    for (const entry of own.reverse()) runCleanup(entry.cleanup);
   }
 
   for (const child of Array.from(node.childNodes)) {

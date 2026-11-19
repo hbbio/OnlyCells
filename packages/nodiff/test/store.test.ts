@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createStore } from "zustand/vanilla";
 import { jsx, mount } from "../src/dom";
-import { derivedStore, effect, list, when } from "../src/store";
+import { createCellStore, derivedStore, effect, list, when } from "../src/store";
 import { installDom } from "./test-dom";
 
 describe("store view helpers", () => {
@@ -17,8 +16,25 @@ describe("store view helpers", () => {
     cleanupDom = undefined;
   });
 
+  test("reads cell writes synchronously and reports only changed snapshots", () => {
+    const store = createCellStore(() => ({ count: 0, label: "count" }));
+    const updates: number[][] = [];
+    const unsubscribe = store.subscribe((now, before) => updates.push([before.count, now.count]));
+
+    store.setState((state) => ({ count: state.count + 1 }));
+    store.setState((state) => state);
+    expect(store.getState()).toEqual({ count: 1, label: "count" });
+    expect(updates).toEqual([[0, 1]]);
+
+    unsubscribe();
+    store.setState({ count: 2, label: "total" }, true);
+    expect(store.getState()).toEqual({ count: 2, label: "total" });
+    expect(store.getInitialState()).toEqual({ count: 0, label: "count" });
+    expect(updates).toEqual([[0, 1]]);
+  });
+
   test("runs effects and renders conditional and list views", () => {
-    const store = createStore(() => ({
+    const store = createCellStore(() => ({
       enabled: true,
       count: 1,
       items: ["a"],
@@ -70,7 +86,7 @@ describe("store view helpers", () => {
   });
 
   test("renders an empty conditional branch when no fallback is provided", () => {
-    const store = createStore(() => ({ enabled: false }));
+    const store = createCellStore(() => ({ enabled: false }));
 
     const unmount = mount(
       "#app",
@@ -90,8 +106,8 @@ describe("store view helpers", () => {
   });
 
   test("derives readable stores from explicit dependencies", () => {
-    const count = createStore(() => ({ value: 1 }));
-    const label = createStore(() => ({ value: "a" }));
+    const count = createCellStore(() => ({ value: 1 }));
+    const label = createCellStore(() => ({ value: "a" }));
     const derived = derivedStore(
       [count, label],
       (countState, labelState) => `${labelState.value}:${countState.value}`,
@@ -123,7 +139,7 @@ describe("store view helpers", () => {
   });
 
   test("supports equality for derived store updates", () => {
-    const source = createStore(() => ({ count: 1, label: "first" }));
+    const source = createCellStore(() => ({ count: 1, label: "first" }));
     const derived = derivedStore([source], (state) => ({ bucket: Math.floor(state.count / 10) }), {
       equality: (left, right) => left.bucket === right.bucket,
     });

@@ -1,6 +1,6 @@
-import { addCleanup, cleanupNode, replaceChildrenClean } from "./lifecycle";
-import { safeErrorMessage, toError } from "./errors";
-import { getSecurityPolicy } from "./security";
+import { addCleanup, cleanupNode, replaceChildrenClean, withRenderCleanup } from "./lifecycle.ts";
+import { safeErrorMessage, toError } from "./errors.ts";
+import { getSecurityPolicy } from "./security.ts";
 
 export type PrimitiveChild = string | number | bigint | boolean | null | undefined;
 export type Child = PrimitiveChild | Node | Child[] | Iterable<Child>;
@@ -33,24 +33,16 @@ export type TrustedHTML = {
 };
 
 export type StyleValue =
-  | string
-  | Partial<CSSStyleDeclaration>
-  | Record<string, string | number | null | undefined>;
+  string | Partial<CSSStyleDeclaration> | Record<string, string | number | null | undefined>;
 
 export type ClassValue =
-  | string
-  | string[]
-  | Record<string, boolean | undefined | null>
-  | false
-  | null
-  | undefined;
+  string | string[] | Record<string, boolean | undefined | null> | false | null | undefined;
 export type AttributeValue = string | number | boolean | null | undefined;
 export type EventHandler<T extends Element, TEvent extends Event> = (
   event: TEvent & { currentTarget: T },
 ) => void;
 export type EventProp<T extends Element, TEvent extends Event> =
-  | EventHandler<T, TEvent>
-  | [EventHandler<T, TEvent>, AddEventListenerOptions?];
+  EventHandler<T, TEvent> | [EventHandler<T, TEvent>, AddEventListenerOptions?];
 
 type EmptyPropValue = false | null | undefined;
 type ElementPropertyValue<TValue> =
@@ -76,13 +68,15 @@ type ReservedElementProp =
   | "use"
   | `on${string}`;
 type ElementPropertyProps<T extends Element, TExcluded extends string = never> = {
-  [K in keyof T as K extends string
-    ? K extends ReservedElementProp | TExcluded
-      ? never
-      : T[K] extends (...args: unknown[]) => unknown
+  [
+    K in keyof T as K extends string
+      ? K extends ReservedElementProp | TExcluded
         ? never
-        : K
-    : never]?: ElementPropertyValue<T[K]>;
+        : T[K] extends (...args: unknown[]) => unknown
+          ? never
+          : K
+      : never
+  ]?: ElementPropertyValue<T[K]>;
 };
 type DataAriaAttributes = {
   [K in `data-${string}`]?: AttributeValue;
@@ -319,6 +313,7 @@ export type IntrinsicElements = HTMLIntrinsicElements &
   SVGIntrinsicElements &
   CustomIntrinsicElements;
 
+const svgNamespace = "http://www.w3.org/2000/svg";
 const svgTags = new Set([
   "svg",
   "animate",
@@ -371,11 +366,13 @@ const svgTags = new Set([
   "use",
 ]);
 
-export const DOM_SINK_POLICY = {
-  blockedElementTags: ["script", "iframe", "object", "embed"],
-  rawHtmlSanitizerElementTags: ["script", "iframe", "object", "embed", "link", "meta"],
-  rawHtmlProperties: ["innerhtml", "outerhtml", "srcdoc"],
-  singleUrlAttributes: [
+const blockedTags = Object.freeze(["script", "iframe", "object", "embed"] as const);
+
+export const DOM_SINK_POLICY = Object.freeze({
+  blockedElementTags: blockedTags,
+  rawHtmlSanitizerElementTags: Object.freeze([...blockedTags, "link", "meta"] as const),
+  rawHtmlProperties: Object.freeze(["innerhtml", "outerhtml", "srcdoc"] as const),
+  singleUrlAttributes: Object.freeze([
     "href",
     "src",
     "action",
@@ -384,11 +381,11 @@ export const DOM_SINK_POLICY = {
     "cite",
     "xlink:href",
     "xlinkhref",
-  ],
-  urlListAttributes: ["srcset"],
-  cssAttributes: ["style"],
+  ] as const),
+  urlListAttributes: Object.freeze(["srcset"] as const),
+  cssAttributes: Object.freeze(["style"] as const),
   eventAttributePrefix: "on",
-} as const;
+} as const);
 
 const blockedElementTags = new Set<string>(DOM_SINK_POLICY.blockedElementTags);
 const rawHtmlSanitizerBlockedTags = new Set<string>(DOM_SINK_POLICY.rawHtmlSanitizerElementTags);
@@ -526,7 +523,7 @@ function validateSrcsetAttributeValue(element: Element, name: string, value: str
   }
 }
 
-export function validateAttributeValue(element: Element, name: string, value: string): void {
+function checkedDomName(name: string, value?: string): string {
   const normalized = name.toLowerCase();
   if (rawHtmlSinkAttributes.has(normalized)) {
     reportDomViolation(`Raw HTML DOM sink is not supported: ${name}.`, value);
@@ -534,9 +531,25 @@ export function validateAttributeValue(element: Element, name: string, value: st
   if (normalized.startsWith(DOM_SINK_POLICY.eventAttributePrefix)) {
     reportDomViolation(`Event handler attributes are not supported: ${name}.`, value);
   }
-  if (cssAttributes.has(normalized)) assertSafeCssValue(value, "style attribute");
-  if (urlListAttributes.has(normalized)) validateSrcsetAttributeValue(element, normalized, value);
-  if (singleUrlAttributes.has(normalized)) safeUrlAttributeValue(element, normalized, value);
+  return normalized;
+}
+
+function checkedSinkString(element: Element, name: string, value: unknown): string | undefined {
+  if (singleUrlAttributes.has(name)) return safeUrlAttributeValue(element, name, String(value));
+  if (urlListAttributes.has(name)) {
+    const text = String(value);
+    validateSrcsetAttributeValue(element, name, text);
+    return text;
+  }
+  if (cssAttributes.has(name)) {
+    const text = String(value);
+    assertSafeCssValue(text, "style attribute");
+    return text;
+  }
+}
+
+export function validateAttributeValue(element: Element, name: string, value: string): void {
+  checkedSinkString(element, checkedDomName(name, value), value);
 }
 
 function assertSafeElementType(type: string): void {
@@ -624,11 +637,7 @@ function setAria(
 ): void {
   for (const [key, raw] of Object.entries(value)) {
     const name = key.startsWith("aria-") ? key : `aria-${key}`;
-    if (raw === null || raw === undefined || raw === false) {
-      element.removeAttribute(name);
-    } else {
-      element.setAttribute(name, String(raw));
-    }
+    setDomAttribute(element, name, raw === true ? "true" : raw);
   }
 }
 
@@ -637,52 +646,44 @@ export function setDomAttribute(element: Element, name: string, value: unknown):
     element.removeAttribute(name);
     return;
   }
-  if (value === true) {
-    element.setAttribute(name, "");
-    return;
-  }
-
-  const next = domString(value);
+  const next = value === true ? "" : domString(value);
   validateAttributeValue(element, name, next);
   element.setAttribute(name, next);
 }
 
-function isSvgElement(element: Element): boolean {
-  return typeof SVGElement !== "undefined" && element instanceof SVGElement;
-}
-
-export function clearDomProperty(element: Element, name: string): void {
+export function setDomProperty(
+  element: Element,
+  name: string,
+  value: unknown,
+  fallback: "attribute" | "throw" = "throw",
+): void {
   const target = element as unknown as Record<string, unknown>;
-  if (name in target && !isSvgElement(element)) {
-    const current = target[name];
-    target[name] = typeof current === "boolean" ? false : typeof current === "number" ? 0 : "";
-  }
-  element.removeAttribute(name === "className" ? "class" : name);
-}
-
-export function setDomProperty(element: Element, name: string, value: unknown): void {
-  if (name.toLowerCase().startsWith("on")) {
-    validateAttributeValue(element, name, "");
-  }
+  const hasProperty = element.namespaceURI !== svgNamespace && name in target;
 
   if (value === null || value === undefined || value === false) {
-    clearDomProperty(element, name);
+    if (hasProperty) {
+      checkedDomName(name);
+      const current = target[name];
+      target[name] = typeof current === "boolean" ? false : typeof current === "number" ? 0 : "";
+    }
+    element.removeAttribute(name === "className" ? "class" : name);
     return;
   }
 
-  const target = element as unknown as Record<string, unknown>;
-  if (name in target && !isSvgElement(element)) {
-    if (typeof value === "string") validateAttributeValue(element, name, value);
-    try {
-      target[name] = value;
-      return;
-    } catch {
-      setDomAttribute(element, name, value);
-      return;
-    }
+  if (!hasProperty) {
+    setDomAttribute(element, name, value);
+    return;
   }
 
-  setDomAttribute(element, name, value);
+  const normalized = checkedDomName(name, typeof value === "string" ? value : undefined);
+  // Use the checked string for any property whose setter would coerce the value.
+  const next = checkedSinkString(element, normalized, value) ?? value;
+  try {
+    target[name] = next;
+  } catch (error) {
+    if (fallback === "throw") throw error;
+    setDomAttribute(element, name, next);
+  }
 }
 
 function applyRef<T extends Node>(node: T, ref: Ref<T>): void {
@@ -723,7 +724,7 @@ function applyProp(element: Element, name: string, value: unknown): void {
   }
 
   if (value === null || value === undefined || value === false) {
-    element.removeAttribute(name === "className" ? "class" : name);
+    setDomAttribute(element, name === "className" ? "class" : name, value);
     return;
   }
 
@@ -783,18 +784,16 @@ function applyProp(element: Element, name: string, value: unknown): void {
   }
 
   if (name.startsWith("aria-") || name.startsWith("data-")) {
-    const next = domString(value);
-    validateAttributeValue(element, name, next);
-    element.setAttribute(name, next);
+    setDomAttribute(element, name, value === true ? "true" : value);
     return;
   }
 
   if (value === true) {
-    element.setAttribute(name, "");
+    setDomAttribute(element, name, value);
     return;
   }
 
-  setDomProperty(element, name, value);
+  setDomProperty(element, name, value, "attribute");
 }
 
 export function toNodes(value: Child): Node[] {
@@ -844,7 +843,7 @@ export function jsx(type: string | Component<any>, props: Record<string, unknown
   assertSafeElementType(type);
 
   const element = svgTags.has(type)
-    ? document.createElementNS("http://www.w3.org/2000/svg", type)
+    ? document.createElementNS(svgNamespace, type)
     : document.createElement(type);
 
   const currentProps = props ?? {};
@@ -893,7 +892,7 @@ function defaultErrorFallback(error: Error): HTMLElement {
 
 function renderWithBoundary(props: ErrorBoundaryHooks, render: () => Child): Child {
   try {
-    return render();
+    return withRenderCleanup(render);
   } catch (caught) {
     const error = toError(caught);
     props.onError?.(error);

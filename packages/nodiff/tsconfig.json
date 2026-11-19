@@ -1,11 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist",
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
     "noEmit": true,
     "jsx": "react-jsx",
     "jsxImportSource": "@nodiffjs/core",

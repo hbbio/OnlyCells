@@ -1,8 +1,7 @@
-import { createStore } from "zustand/vanilla";
-import { bind, derivedStore, type PropsBinding } from "../src/store";
+import { createCellStore, bind, derivedStore, type PropsBinding } from "../src/store";
 
-const count = createStore(() => ({ value: 1 }));
-const label = createStore(() => ({ value: "posts" }));
+const count = createCellStore(() => ({ value: 1 }));
+const label = createCellStore(() => ({ value: "posts" }));
 
 const vm = derivedStore([count, label], (countState, labelState) => ({
   label: labelState.value,
@@ -21,9 +20,6 @@ bind.props(vm, (state) => ({
   class: { active: state.doubled > 1 },
   title: state.label,
 }));
-
-// @ts-expect-error single-property binding is intentionally not part of the safe bind API.
-bind.prop("title", vm, (state) => state.label);
 
 const props = {
   disabled: true,

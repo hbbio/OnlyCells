@@ -1,6 +1,4 @@
 import { catchRender, mount } from "@nodiffjs/core";
-import { App, router } from "./app";
-import "./styles.css";
+import { App } from "./app";
 
-router.start();
-mount("#app", catchRender({ render: App }));
+mount("#app", catchRender({ render: () => <App /> }));

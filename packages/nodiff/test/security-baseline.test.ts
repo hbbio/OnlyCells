@@ -95,15 +95,14 @@ describe("security baseline", () => {
   test("keeps the demo away from common production footguns", () => {
     const state = readRepoFile("apps/demo/src/state.ts");
     const authPage = readRepoFile("apps/demo/src/pages/AuthPage.tsx");
-    const vite = readRepoFile("apps/demo/vite.config.ts");
+    const build = readRepoFile("apps/demo/build.ts");
     const html = readRepoFile("apps/demo/index.html");
 
     expect(state).not.toContain("persist: true");
     expect(state).not.toContain("allowRefreshTokenPersistence: true");
     expect(authPage).toContain("csrf:");
     expect(authPage).toContain("getToken: readDemoCsrfToken");
-    expect(vite).toContain("sourcemap: false");
-    expect(vite).not.toContain("sourcemap: true");
+    expect(build).toContain('sourcemap: "none"');
     expect(html).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/i);
     expect(html).not.toMatch(/\son[a-z]+\s*=/i);
   });

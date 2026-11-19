@@ -1,6 +1,6 @@
-export { Fragment } from "./dom";
+export { Fragment } from "./dom.ts";
 
-import { jsx } from "./dom";
+import { jsx } from "./dom.ts";
 import type {
   Child,
   Component,
@@ -10,7 +10,7 @@ import type {
   HTMLElementProps,
   IntrinsicElements as DomIntrinsicElements,
   SVGElementProps,
-} from "./dom";
+} from "./dom.ts";
 
 export function jsxDEV<P extends object>(
   type: Component<P>,

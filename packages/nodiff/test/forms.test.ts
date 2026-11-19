@@ -1,9 +1,22 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { z } from "zod";
 import { jsx, mount } from "../src/dom";
 import { CsrfError } from "../src/csrf";
-import { applyZodValidity, formValues, zodSubmit } from "../src/forms";
+import { applyFormValidity, formValues, validatedSubmit } from "../src/forms";
+import { defineSchema, ValidationError } from "../src/schema";
 import { installDom } from "./test-dom";
+
+const emailSchema = defineSchema((input) => {
+  if (
+    !input ||
+    typeof input !== "object" ||
+    !("email" in input) ||
+    typeof input.email !== "string" ||
+    !input.email.includes("@")
+  ) {
+    throw new ValidationError([{ path: ["email"], message: "Use a valid email address." }]);
+  }
+  return { email: input.email };
+});
 
 describe("forms", () => {
   let cleanupDom: (() => void) | undefined;
@@ -23,10 +36,8 @@ describe("forms", () => {
     const unmount = mount(
       "#app",
       jsx("form", {
-        use: zodSubmit(
-          z.object({
-            email: z.string().email(),
-          }),
+        use: validatedSubmit(
+          emailSchema,
           (values) => {
             submitted = values;
           },
@@ -62,11 +73,8 @@ describe("forms", () => {
     const unmount = mount(
       "#app",
       jsx("form", {
-        use: zodSubmit(
-          z.object({
-            email: z.string().email("Use a valid email address."),
-            tag: z.array(z.string()),
-          }),
+        use: validatedSubmit(
+          emailSchema,
           () => {
             submitted = true;
           },
@@ -99,8 +107,7 @@ describe("forms", () => {
     const email = form.elements.namedItem("email") as HTMLInputElement;
     expect(email.validationMessage).toBe("Use a valid email address.");
 
-    const rootResult = z.string().safeParse(1);
-    if (!rootResult.success) applyZodValidity(form, rootResult.error);
+    applyFormValidity(form, new ValidationError([{ path: [], message: "Invalid form." }]));
     expect(email.validationMessage).toBe("");
 
     unmount();
@@ -112,8 +119,8 @@ describe("forms", () => {
     const unmount = mount(
       "#app",
       jsx("form", {
-        use: zodSubmit(
-          z.object({ email: z.string().email() }),
+        use: validatedSubmit(
+          emailSchema,
           () => {
             submitted = true;
           },

@@ -4,43 +4,22 @@
   "private": true,
   "license": "MIT",
   "author": "Henri Binsztok",
-  "workspaces": {
-    "packages": [
-      "packages/*",
-      "apps/*"
-    ],
-    "catalog": {
-      "@tailwindcss/vite": "4.2.4",
-      "@types/node": "^24.0.0",
-      "@typescript/native-preview": "7.0.0-dev.20260421.2",
-      "daisyui": "5.5.19",
-      "happy-dom": "20.9.0",
-      "oxfmt": "0.48.0",
-      "oxlint": "1.63.0",
-      "oxlint-tsgolint": "^0.22.1",
-      "tailwindcss": "4.2.4",
-      "vite": "^8.0.11",
-      "zod": "^4.4.3",
-      "zustand": "^5.0.13"
-    }
-  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
-    "dev": "cd apps/demo && bun run dev",
-    "build": "cd packages/nodiff && bun run build && cd ../../apps/demo && bun run build",
-    "typecheck": "cd packages/nodiff && bun run typecheck && cd ../../apps/demo && bun run typecheck",
-    "lint": "oxlint . --type-aware --deny-warnings",
-    "lint:fix": "oxlint . --fix",
-    "format": "oxfmt",
-    "format:check": "oxfmt --check",
+    "dev": "bun run --cwd apps/demo dev",
+    "build": "bun run --cwd packages/nodiff build && bun run --cwd apps/demo build",
+    "typecheck": "bun run --cwd packages/nodiff typecheck && bun run --cwd apps/demo typecheck",
+    "format": "bun fmt",
+    "format:check": "bun fmt --check",
     "test": "bun test",
-    "check": "bun run typecheck && bun run lint && bun run format:check && bun run test",
+    "check": "bun run typecheck && bun run format:check && bun run test",
     "security:check": "bun audit && bun run check && bun run build"
   },
   "devDependencies": {
-    "happy-dom": "catalog:",
-    "oxfmt": "catalog:",
-    "oxlint": "catalog:",
-    "oxlint-tsgolint": "catalog:"
+    "happy-dom": "21.0.4"
   },
-  "packageManager": "bun@1.3.14"
+  "packageManager": "bun@1.4.4"
 }

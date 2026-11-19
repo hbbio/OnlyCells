@@ -39,6 +39,18 @@ describe("createAuth", () => {
     expect(createAuth({ storageKey }).getToken()).toBeNull();
   });
 
+  test("validates persisted token fields and preserves extra token data", () => {
+    const storageKey = "auth-test:shape";
+    const cache = createLocalCache("");
+    cache.set(storageKey, { accessToken: "saved", expiresAt: "never" });
+    expect(createAuth({ storageKey, persist: true }).getToken()).toBeNull();
+    expect(cache.get(storageKey)).toBeUndefined();
+
+    const token = { accessToken: "saved", scope: "posts" };
+    cache.set(storageKey, token);
+    expect(createAuth({ storageKey, persist: true }).requireToken()).toEqual(token);
+  });
+
   test("refuses to persist refresh tokens unless explicitly allowed", () => {
     const storageKey = "auth-test:refresh-token";
     const auth = createAuth({ storageKey, persist: true });

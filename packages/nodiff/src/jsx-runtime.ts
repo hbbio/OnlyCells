@@ -1,6 +1,6 @@
-export { Fragment, jsx, jsxs } from "./dom";
+export { Fragment, jsx, jsxs } from "./dom.ts";
 
-import type { Child, Component, IntrinsicElements as DomIntrinsicElements } from "./dom";
+import type { Child, Component, IntrinsicElements as DomIntrinsicElements } from "./dom.ts";
 
 export namespace JSX {
   export type Element = Child;

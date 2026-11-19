@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createStore } from "zustand/vanilla";
 import { jsx, mount } from "../src/dom";
 import { createResource, type ResourceState } from "../src/resource";
-import { Await, ResourceView } from "../src/store";
+import { createCellStore, Await, ResourceView } from "../src/store";
 import { installDom } from "./test-dom";
 
 type User = {
@@ -36,7 +35,7 @@ describe("ResourceView", () => {
   });
 
   test("renders empty, pending, success, stale data, and error branches", () => {
-    const resource = createStore<ResourceState<User>>(() => state());
+    const resource = createCellStore<ResourceState<User>>(() => state());
     const errors: string[] = [];
 
     const unmount = mount(
@@ -116,7 +115,7 @@ describe("ResourceView", () => {
   });
 
   test("cleans replaced branches and unsubscribes on unmount", () => {
-    const resource = createStore<ResourceState<User>>(() =>
+    const resource = createCellStore<ResourceState<User>>(() =>
       state({ status: "loading", loading: true }),
     );
     let cleanups = 0;
@@ -186,7 +185,7 @@ describe("ResourceView", () => {
   });
 
   test("honors equality for whole resource states", () => {
-    const resource = createStore<ResourceState<User>>(() =>
+    const resource = createCellStore<ResourceState<User>>(() =>
       state({
         status: "success",
         data: { id: 1, name: "Ada" },

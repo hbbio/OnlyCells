@@ -1,8 +1,14 @@
+import { Sheet } from "@okcontract/cells";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createStore } from "zustand/vanilla";
 import { jsx, mount } from "../src/dom";
 import { configureSecurityPolicy } from "../src/security";
-import { bind, type ClassBinding, type PropsBinding, type StyleBinding } from "../src/store";
+import {
+  createCellStore,
+  bind,
+  type ClassBinding,
+  type PropsBinding,
+  type StyleBinding,
+} from "../src/store";
 import { installDom } from "./test-dom";
 
 type BindingState = {
@@ -19,7 +25,7 @@ type BindingState = {
 };
 
 function createBindingStore() {
-  return createStore<BindingState>(() => ({
+  return createCellStore<BindingState>(() => ({
     style: { color: "red", backgroundColor: "white" },
     classes: { active: true, hidden: false },
     userId: "123",
@@ -48,7 +54,50 @@ describe("bind helpers", () => {
     cleanupDom = undefined;
   });
 
-  test("binds style, classes, dataset, and aria", () => {
+  test("updates native cell records and replaces native cell arrays", () => {
+    const sheet = new Sheet();
+    const preferences = sheet.new({ count: 1, label: "total" });
+    const selected = sheet.new<string[]>([]);
+    const unmount = mount("#app", [
+      jsx("input", {
+        type: "number",
+        use: bind.number(
+          preferences,
+          (state) => state.count,
+          (count) => ({ count: count ?? 0 }),
+        ),
+      }),
+      jsx("input", {
+        type: "checkbox",
+        value: "a",
+        use: bind.checkedGroup(
+          selected,
+          (values) => values,
+          (values) => values,
+        ),
+      }),
+    ]);
+
+    const number = document.querySelector<HTMLInputElement>('input[type="number"]')!;
+    const checkbox = document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    number.value = "3";
+    number.dispatchEvent(new Event("input"));
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event("change"));
+    expect(preferences.value).toEqual({ count: 3, label: "total" });
+    expect(selected.value).toEqual(["a"]);
+
+    preferences.apply((state) => {
+      state.count = 4;
+    });
+    expect(number.value).toBe("4");
+
+    unmount();
+    selected.set([]);
+    expect(checkbox.checked).toBe(true);
+  });
+
+  test("binds style, classes, dataset, aria, and properties", () => {
     const store = createBindingStore();
 
     const unmount = mount(
@@ -60,6 +109,7 @@ describe("bind helpers", () => {
           bind.classes(store, (state) => state.classes),
           bind.dataset("user-id", store, (state) => state.userId),
           bind.aria("busy", store, (state) => state.busy),
+          bind.prop<BindingState, string, HTMLElement>("title", store, (state) => state.title),
         ],
         children: "Bound",
       }),
@@ -73,12 +123,14 @@ describe("bind helpers", () => {
     expect(div.classList.contains("hidden")).toBe(false);
     expect(div.getAttribute("data-user-id")).toBe("123");
     expect(div.getAttribute("aria-busy")).toBe("true");
+    expect(div.title).toBe("Initial");
 
     store.setState({
       style: { color: "blue", zIndex: 2 },
       classes: ["selected", "static"],
       userId: null,
       busy: false,
+      title: "Updated",
     });
 
     expect(div.style.color).toBe("blue");
@@ -89,6 +141,7 @@ describe("bind helpers", () => {
     expect(div.classList.contains("selected")).toBe(true);
     expect(div.hasAttribute("data-user-id")).toBe(false);
     expect(div.hasAttribute("aria-busy")).toBe(false);
+    expect(div.title).toBe("Updated");
 
     store.setState({ style: "display: none; color: green;" });
     expect(div.style.display).toBe("none");
@@ -98,7 +151,7 @@ describe("bind helpers", () => {
   });
 
   test("binds grouped props and cleans removed keys", () => {
-    const store = createStore(() => ({
+    const store = createCellStore(() => ({
       props: {
         disabled: true,
         title: "Initial",
@@ -170,7 +223,7 @@ describe("bind helpers", () => {
   });
 
   test("binds grouped string styles and fallback attributes", () => {
-    const store = createStore(() => ({
+    const store = createCellStore(() => ({
       props: {
         style: "display: none; color: red;",
         custom: "yes",
@@ -209,7 +262,7 @@ describe("bind helpers", () => {
   test("binds text, single classes, attribute variants, plain dataset keys, and style resets", () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
-    const store = createStore(() => ({
+    const store = createCellStore(() => ({
       label: null as string | null,
       active: false,
       flag: false,
@@ -306,7 +359,7 @@ describe("bind helpers", () => {
   });
 
   test("binds string values and checked state with cleanup", () => {
-    const store = createStore(() => ({
+    const store = createCellStore(() => ({
       title: "Initial",
       accepted: false,
     }));
@@ -521,7 +574,7 @@ describe("bind helpers", () => {
   });
 
   test("blocks unsafe URL and CSS values in bindings", () => {
-    const store = createStore(() => ({
+    const store = createCellStore(() => ({
       href: "https://example.test",
       srcset: "/small.png 1x, /large.png 2x",
       style: { color: "green" } as StyleBinding,
@@ -558,7 +611,7 @@ describe("bind helpers", () => {
   });
 
   test("blocks unsafe grouped props", () => {
-    const store = createStore(() => ({
+    const store = createCellStore(() => ({
       props: {
         href: "https://example.test",
         style: { color: "green" },
@@ -601,8 +654,43 @@ describe("bind helpers", () => {
     unmount();
   });
 
-  test("blocks raw HTML DOM sink grouped props", () => {
-    const grouped = createStore(() => ({
+  test("surfaces property setter errors on Cell updates", () => {
+    const element = document.createElement("div");
+    Object.defineProperty(element, "label", {
+      set(value: string) {
+        if (value === "invalid") throw new Error("Invalid label");
+      },
+    });
+    const label = new Sheet().new("valid");
+    const unsubscribe = bind.prop("label", label, (value) => value)(element);
+
+    expect(() => label.set("invalid")).toThrow("Invalid label");
+    expect(element.hasAttribute("label")).toBe(false);
+    unsubscribe?.();
+  });
+
+  test("blocks raw HTML DOM sink property bindings", () => {
+    const rawProperty = createCellStore(() => ({
+      html: "<img src=x onerror=alert(1)>",
+    }));
+
+    expect(() =>
+      jsx("div", {
+        use: bind.prop("innerHTML", rawProperty, (state) => state.html),
+      }),
+    ).toThrow("Raw HTML DOM sink");
+    expect(() =>
+      jsx("div", {
+        use: bind.prop("outerHTML", rawProperty, (state) => state.html),
+      }),
+    ).toThrow("Raw HTML DOM sink");
+    expect(() =>
+      jsx("iframe-preview", {
+        use: bind.prop("srcdoc", rawProperty, (state) => state.html),
+      }),
+    ).toThrow("Raw HTML DOM sink");
+
+    const grouped = createCellStore(() => ({
       props: {
         title: "Safe",
       } satisfies PropsBinding,
