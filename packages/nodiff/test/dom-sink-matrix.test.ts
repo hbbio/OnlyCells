@@ -100,7 +100,7 @@ const writePaths: WritePath[] = [
     write(sink) {
       const cell = new Sheet().new(sink.value);
       render(sink.tag, {
-        use: bind.attr(sink.prop, cell, (value) => value),
+        use: bind.attr(sink.prop, cell),
       });
     },
   },
@@ -109,7 +109,7 @@ const writePaths: WritePath[] = [
     write(sink) {
       const cell = new Sheet().new(sink.value);
       render(sink.tag, {
-        use: bind.prop(sink.prop, cell, (value) => value),
+        use: bind.prop(sink.prop, cell),
       });
     },
   },
@@ -190,7 +190,7 @@ describe("DOM sink matrix", () => {
     });
     const href = new Sheet().new<string | URL>("https://example.test/initial");
     const link = jsx("a", {
-      use: bind.prop("href", href, (value) => value),
+      use: bind.prop("href", href),
     }) as HTMLAnchorElement;
 
     href.set(new URL("https://example.test/updated"));

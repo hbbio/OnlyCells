@@ -1,37 +1,35 @@
-import { type AuthToken, bind, Show, text, validatedSubmit } from "@nodiffjs/core";
+import { type AuthToken, bind, Show, validatedSubmit } from "@nodiffjs/core";
 import { component } from "../cells";
 import { PageHeader, SectionTitle, StatusMetric } from "../components";
 import { LoginSchema } from "../schemas";
 import { auth, demoCookieSessionRequest, fakeLogin, readDemoCsrfToken, session } from "../state";
 
 const AuthOverview = component("AuthOverview", (proxy) => {
-  const summary = proxy.map(
-    [session],
-    ({ user, status, token }) => ({
-      userName: user?.name ?? "guest",
-      tokenType: token?.tokenType ?? "Bearer",
-      hasToken: token !== null,
-      status,
-    }),
-    "session summary",
-    true,
-  );
+  const status = proxy.map([session], (state) => state.status, "session status", true);
 
   return (
     <section class="panel metrics">
       <StatusMetric
         label="Session"
-        value={text(summary, (state) => state.userName)}
-        badge={text(summary, (state) => state.status)}
+        value={proxy.map([session], ({ user }) => user?.name ?? "guest", "session user", true)}
+        badge={status}
         hint="Token state lives in a cell."
-        use={bind.classes(summary, (state) => ({
-          "tone-success": state.status === "authenticated",
-        }))}
+        use={bind.class("tone-success", status, (value) => value === "authenticated")}
       />
       <StatusMetric
         label="Authorization"
-        value={text(summary, (state) => state.tokenType)}
-        badge={text(summary, (state) => (state.hasToken ? "ready" : "empty"))}
+        value={proxy.map(
+          [session],
+          ({ token }) => token?.tokenType ?? "Bearer",
+          "token type",
+          true,
+        )}
+        badge={proxy.map(
+          [session],
+          ({ token }) => (token ? "ready" : "empty"),
+          "token badge",
+          true,
+        )}
         hint="First-party requests read headers from this controller."
       />
     </section>
@@ -99,9 +97,7 @@ const AuthenticatedPanel = component(
   },
 );
 
-export const AuthPage = component("AuthPage", (proxy) => {
-  const token = proxy.map([session], (state) => state.token, "active token", true);
-
+export const AuthPage = component("AuthPage", () => {
   return (
     <section class="page">
       <PageHeader title="Bearer headers without ceremony.">
@@ -115,7 +111,7 @@ export const AuthPage = component("AuthPage", (proxy) => {
         Show swaps the login form and token panel as the session cell changes.
       </SectionTitle>
 
-      <Show store={token} when={(value) => value} fallback={() => <LoginPanel />}>
+      <Show store={session} when={({ token }) => token} fallback={() => <LoginPanel />}>
         {(value) => <AuthenticatedPanel token={value} />}
       </Show>
     </section>

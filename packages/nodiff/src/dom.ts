@@ -1,9 +1,11 @@
 import { addCleanup, cleanupNode, replaceChildrenClean, withRenderCleanup } from "./lifecycle.ts";
 import { safeErrorMessage, toError } from "./errors.ts";
 import { getSecurityPolicy } from "./security.ts";
+import type { ReadableCell } from "./store.ts";
 
 export type PrimitiveChild = string | number | bigint | boolean | null | undefined;
-export type Child = PrimitiveChild | Node | Child[] | Iterable<Child>;
+type CellChild = ReadableCell<PrimitiveChild | Error>;
+export type Child = PrimitiveChild | Node | CellChild | Child[] | Iterable<Child>;
 export type Component<P extends object = Record<string, unknown>> = (
   props: P & { children?: Child },
 ) => Child;
@@ -400,6 +402,16 @@ function isIterable(value: unknown): value is Iterable<Child> {
 
 function isNode(value: unknown): value is Node {
   return typeof Node !== "undefined" && value instanceof Node;
+}
+
+function isCellChild(value: unknown): value is CellChild {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "value" in value &&
+    "subscribe" in value &&
+    typeof value.subscribe === "function"
+  );
 }
 
 const eventAliases = new Map([["DoubleClick", "dblclick"]]);
@@ -818,14 +830,31 @@ function applyProp(element: Element, name: string, value: unknown): void {
   setDomProperty(element, name, value, "attribute");
 }
 
-export function toNodes(value: Child): Node[] {
+function collectNodes(value: Child): Node[] {
   if (value === null || value === undefined || typeof value === "boolean") return [];
   if (isNode(value)) return [value];
-  if (Array.isArray(value)) return value.flatMap((child) => toNodes(child));
+  if (Array.isArray(value)) return value.flatMap(collectNodes);
   if (typeof value !== "string" && isIterable(value)) {
-    return Array.from(value).flatMap((child) => toNodes(child));
+    return Array.from(value).flatMap(collectNodes);
+  }
+  if (isCellChild(value)) {
+    const node = document.createTextNode("");
+    const update = (next: PrimitiveChild | Error) => {
+      const content =
+        typeof next === "string" || typeof next === "number" || typeof next === "bigint"
+          ? String(next)
+          : "";
+      if (node.data !== content) node.data = content;
+    };
+    update(value.value);
+    addCleanup(node, value.subscribe(update));
+    return [node];
   }
   return [document.createTextNode(String(value))];
+}
+
+export function toNodes(value: Child): Node[] {
+  return withRenderCleanup(() => collectNodes(value));
 }
 
 export function fragment(children?: Child): DocumentFragment {
@@ -835,9 +864,9 @@ export function fragment(children?: Child): DocumentFragment {
 }
 
 export function append(parent: Node, value: Child): void {
-  for (const node of toNodes(value)) {
-    parent.appendChild(node);
-  }
+  withRenderCleanup(() => {
+    for (const node of collectNodes(value)) parent.appendChild(node);
+  });
 }
 
 export function jsx<P extends object>(
@@ -858,37 +887,36 @@ export function jsx<K extends keyof CustomIntrinsicElements>(
 ): Child;
 export function jsx(type: string, props: ElementProps | null): Child;
 export function jsx(type: string | Component<any>, props: Record<string, unknown> | null): Child {
-  if (typeof type === "function") {
-    return type({ ...props });
-  }
+  return withRenderCleanup(() => {
+    if (typeof type === "function") return type({ ...props });
 
-  assertSafeElementType(type);
+    assertSafeElementType(type);
 
-  const element = svgTags.has(type)
-    ? document.createElementNS(svgNamespace, type)
-    : document.createElement(type);
+    const element = svgTags.has(type)
+      ? document.createElementNS(svgNamespace, type)
+      : document.createElement(type);
 
-  const currentProps = props ?? {};
-  for (const [name, value] of Object.entries(currentProps)) {
-    if (name === "use") continue;
-    applyProp(element, name, value);
-  }
+    const currentProps = props ?? {};
+    for (const [name, value] of Object.entries(currentProps)) {
+      if (name === "use") continue;
+      applyProp(element, name, value);
+    }
 
-  if (
-    currentProps.children !== undefined &&
-    currentProps.unsafeHTML === undefined &&
-    currentProps.textContent === undefined
-  ) {
-    append(element, currentProps.children as Child);
-  }
+    if (
+      currentProps.children !== undefined &&
+      currentProps.unsafeHTML === undefined &&
+      currentProps.textContent === undefined
+    ) {
+      append(element, currentProps.children as Child);
+    }
 
-  if (currentProps.use !== undefined) {
-    applyProp(element, "use", currentProps.use);
-  }
+    if (currentProps.use !== undefined) {
+      applyProp(element, "use", currentProps.use);
+    }
 
-  enforceAnchorRel(element);
-
-  return element;
+    enforceAnchorRel(element);
+    return element;
+  });
 }
 
 export const jsxs = jsx;
@@ -945,8 +973,10 @@ export function mount(
       `Mount target not found: ${typeof host === "string" ? host : host.tagName.toLowerCase()}`,
     );
 
-  const rendered = typeof node === "function" ? (node as Component)(props ?? {}) : node;
-  replaceChildrenClean(element, toNodes(rendered));
+  withRenderCleanup(() => {
+    const rendered = typeof node === "function" ? (node as Component)(props ?? {}) : node;
+    replaceChildrenClean(element, collectNodes(rendered));
+  });
 
   return () => {
     cleanupNode(element);

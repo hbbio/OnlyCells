@@ -91,9 +91,16 @@ export { postsState, preferences, session } from "./state";`,
     expect(homeCells).toBeGreaterThan(appCells);
     expect(document.documentElement.dataset.theme).toBe("night");
     expect(document.querySelector(".counter-value")?.textContent).toBe("2");
+    expect(JSON.parse(window.localStorage.getItem("demo:preferences")!)).toEqual({
+      count: 2,
+      search: "",
+      postPage: 1,
+      theme: "night",
+      step: 1,
+    });
     document.querySelector<HTMLButtonElement>(".counter-card .button-primary")?.click();
     expect(document.querySelector(".counter-value")?.textContent).toBe("3");
-    expect(JSON.parse(window.localStorage.getItem("demo:preferences")!).value.count).toBe(3);
+    expect(JSON.parse(window.localStorage.getItem("demo:preferences")!).count).toBe(3);
 
     const swatch = document.querySelector<HTMLButtonElement>(
       'button.theme-swatch[data-theme="nord"]',
@@ -108,7 +115,7 @@ export { postsState, preferences, session } from "./state";`,
     expect(document.documentElement.dataset.theme).toBe("nord");
     expect(themeSelect.value).toBe("nord");
     expect(swatch.getAttribute("aria-pressed")).toBe("true");
-    expect(JSON.parse(window.localStorage.getItem("demo:preferences")!).value.theme).toBe("nord");
+    expect(JSON.parse(window.localStorage.getItem("demo:preferences")!).theme).toBe("nord");
     expect(selectChanges).toBe(0);
 
     for (let attempt = 0; attempt < 3; attempt++) {

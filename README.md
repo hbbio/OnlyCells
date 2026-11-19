@@ -257,8 +257,8 @@ The API data comes from JSONPlaceholder. The app validates every post before it 
 
 One `Sheet` owns the demo’s preferences, session, route, and resource state. Each component gets
 a `SheetProxy` for local state and derived cells. The demo’s `component` helper destroys the proxy
-on unmount and releases bindings created during a failed render. The cache inspector reads storage
-on mount and refresh and publishes the inventory to its local cell. [Demo Cells integration](apps/demo/src/cells.ts) · [Cells proxy lifecycle](https://github.com/okcontract/cells#memory-management-and-proxies)
+on unmount and releases bindings created during a failed render. Cells persist preferences, and the
+cache inspector reads storage on mount and refresh. [Demo Cells integration](apps/demo/src/cells.ts) · [Cells proxy lifecycle](https://github.com/okcontract/cells#memory-management-and-proxies)
 
 ## Tutorial: build the mental model
 
@@ -292,7 +292,7 @@ const HomePage = component("HomePage", (proxy) => {
     <section class="panel">
       <h1>Direct DOM TSX</h1>
       <button onClick={() => preferences.update((state) => ({ ...state, count: state.count + 1 }))}>
-        Count: {text(count, (value) => value)}
+        Count: {count}
       </button>
     </section>
   );
@@ -303,13 +303,14 @@ const HomePage = component("HomePage", (proxy) => {
 
 ### 3. Bind text to state
 
-Use `text` when only a text node needs to change.
+Pass a Cell that holds text or a number as a JSX child or a `Child` prop.
 
 ```tsx
-<p>Count: {text(preferences, (state) => state.count)}</p>
+<p>Count: {count}</p>
 ```
 
-This creates one `Text` node and subscribes it to the cell. When `count` changes, the node data changes. The surrounding paragraph stays in place.
+NoDiff updates a single `Text` node and unsubscribes when the node is cleaned up. Use
+`text(preferences, (state) => state.count)` to select a field or add a formatter at the binding site.
 
 ### 4. Bind form controls
 
@@ -705,16 +706,19 @@ Use a component proxy for derived cells and `derivedStore` for `ReadableStore` i
 const postsVm = proxy.map([postsState, preferences], readPostsVm, "posts view", true);
 ```
 
-The map lists its dependencies and the component proxy owns the result.
+The component proxy owns the result. In Cells 0.4.0, every dependency must be a Cell. Capture fixed
+inputs in the callback.
 
 `bind` helpers:
 
 ```ts
 bind.text(store, selector, format?, equality?);
+bind.attr(name, cell);
 bind.attr(name, store, selector, equality?);
 bind.class(name, store, selector, equality?);
 bind.classes(store, selector, equality?);
 bind.style(store, selector, equality?);
+bind.prop(name, cell);
 bind.prop(name, store, selector, equality?);
 bind.props(store, selector, equality?);
 bind.dataset(name, store, selector, equality?);
@@ -728,7 +732,9 @@ bind.selected(store, selector, commit, equality?);
 bind.files(store, commit);
 ```
 
-Use `text` for inline text nodes. Use `bind.text` when the element already exists and should receive `textContent`. Use `view` for regions. Use `effect` for side effects tied to a node lifecycle.
+Use a Cell child for inline text and `text` to select or format a value. Use `bind.text` when the
+element already exists and should receive `textContent`. Use `view` for regions and `effect` for
+side effects tied to a node lifecycle.
 
 Use `bind.props` when several element states should move together:
 
@@ -912,26 +918,21 @@ Use `validatedSubmit` as a form action.
 
 ### Persist preferences from a cell
 
+Cells 0.4.0 saves the value as JSON in localStorage when the cell has an `_storageKey`.
+
 ```ts
-import { createLocalCache } from "@nodiffjs/core";
 import { sheet } from "./cells";
-import { PreferencesSchema } from "./schemas";
 
-const cache = createLocalCache("app:");
-
-const initial = cache.get("preferences", PreferencesSchema, { allowStale: true })?.value ?? {
-  count: 0,
-  search: "",
-  postPage: 1,
-  theme: "system" as const,
-  step: 1,
-};
-const preferences = sheet.new(initial);
-
-preferences.subscribe((state) => {
-  if (state !== initial) cache.set("preferences", state, { tags: ["preferences"] });
-});
+const preferences = sheet.new(
+  { count: 0, search: "", postPage: 1, theme: "system", step: 1 },
+  undefined,
+  "preferences",
+  { _storageKey: "app:preferences" },
+);
 ```
+
+The demo validates saved preferences and migrates the earlier cache format before creating the
+cell. [Demo preferences](apps/demo/src/state.ts)
 
 ### Add an active class from state
 

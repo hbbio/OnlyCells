@@ -717,6 +717,30 @@ function createPropsBinding(element: Element): (value: PropsBinding) => void {
   };
 }
 
+function bindDomValue(write: (element: Element, name: string, value: unknown) => void) {
+  function binding<TState>(name: string, store: StateSource<TState>): Action;
+  function binding<TState, TValue, TElement extends Element = Element>(
+    name: string,
+    store: StateSource<TState>,
+    selector: Selector<TState, TValue>,
+    equality?: Equality<TValue>,
+  ): Action<TElement>;
+  function binding<TState, TValue, TElement extends Element>(
+    name: string,
+    store: StateSource<TState>,
+    selector?: Selector<TState, TValue>,
+    equality?: Equality<TValue>,
+  ): Action<TElement> {
+    const select = selector ?? ((value: TState) => value as unknown as TValue);
+    return (element) => {
+      const sync = (value: TValue) => write(element, name, value);
+      sync(select(readState(store)));
+      return subscribeSelector(store, select, sync, equality);
+    };
+  }
+  return binding;
+}
+
 export const bind = {
   text<TState, TValue>(
     store: StateSource<TState>,
@@ -734,18 +758,7 @@ export const bind = {
     };
   },
 
-  attr<TState, TValue>(
-    name: string,
-    store: StateSource<TState>,
-    selector: Selector<TState, TValue>,
-    equality?: Equality<TValue>,
-  ): Action<Element> {
-    return (element) => {
-      const sync = (value: TValue) => setDomAttribute(element, name, value);
-      sync(selector(readState(store)));
-      return subscribeSelector(store, selector, sync, equality);
-    };
-  },
+  attr: bindDomValue(setDomAttribute),
 
   class<TState>(
     name: string,
@@ -792,18 +805,7 @@ export const bind = {
     };
   },
 
-  prop<TState, TValue, TElement extends Element = Element>(
-    name: string,
-    store: StateSource<TState>,
-    selector: Selector<TState, TValue>,
-    equality?: Equality<TValue>,
-  ): Action<TElement> {
-    return (element) => {
-      const sync = (value: TValue) => setDomProperty(element, name, value);
-      sync(selector(readState(store)));
-      return subscribeSelector(store, selector, sync, equality);
-    };
-  },
+  prop: bindDomValue(setDomProperty),
 
   props<TState, TValue extends PropsBinding, TElement extends Element = Element>(
     store: StateSource<TState>,

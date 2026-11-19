@@ -1,4 +1,4 @@
-import { bind, text, type Action, type Child } from "@nodiffjs/core";
+import { bind, type Action, type Child } from "@nodiffjs/core";
 import { component } from "./cells";
 import { themeOptions, type PreferencesData } from "./schemas";
 import { preferences } from "./state";
@@ -71,7 +71,7 @@ export const CounterCard = component("CounterCard", (proxy) => {
       <div class="panel-heading">
         <div>
           <h2 class="panel-label">Counter</h2>
-          <strong class="counter-value">{text(count, (value) => value)}</strong>
+          <strong class="counter-value">{count}</strong>
         </div>
         <Badge>localStorage</Badge>
       </div>
@@ -123,7 +123,7 @@ export const ThemeCard = component("ThemeCard", (proxy) => {
       <label class="field">
         Theme
         <select
-          use={bind.prop("value", selected, (theme) => theme)}
+          use={bind.prop("value", selected)}
           onChange={(event) => {
             const theme = themeOptions.find((value) => value === event.currentTarget.value);
             if (theme !== undefined) setTheme(theme);
