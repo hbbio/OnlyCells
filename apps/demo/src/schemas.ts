@@ -1,29 +1,5 @@
 import { defineSchema, ValidationError, type ValidationIssue } from "@nodiffjs/core";
 
-export const themeOptions = [
-  "system",
-  "light",
-  "dark",
-  "cupcake",
-  "corporate",
-  "emerald",
-  "synthwave",
-  "retro",
-  "cyberpunk",
-  "night",
-  "nord",
-  "sunset",
-  "silk",
-] as const;
-
-export type PreferencesData = {
-  count: number;
-  search: string;
-  postPage: number;
-  theme: (typeof themeOptions)[number];
-  step: number;
-};
-
 export type Post = { userId: number; id: number; title: string; body: string };
 export type LoginValues = { email: string; password: string };
 
@@ -34,25 +10,6 @@ function isRecord(input: unknown): input is Record<string, unknown> {
 function invalid(message: string, path: readonly PropertyKey[] = []): never {
   throw new ValidationError([{ path, message }]);
 }
-
-function isTheme(input: unknown): input is PreferencesData["theme"] {
-  return themeOptions.some((theme) => theme === input);
-}
-
-function isIntegerAtLeast(input: unknown, minimum: number): input is number {
-  return typeof input === "number" && Number.isSafeInteger(input) && input >= minimum;
-}
-
-export const PreferencesSchema = defineSchema((input): PreferencesData => {
-  if (!isRecord(input)) invalid("Expected preferences.");
-  const { count, search, postPage = 1, theme, step = 1 } = input;
-  if (!isIntegerAtLeast(count, 0)) invalid("Expected a nonnegative count.", ["count"]);
-  if (typeof search !== "string") invalid("Expected a search string.", ["search"]);
-  if (!isIntegerAtLeast(postPage, 1)) invalid("Expected a positive page number.", ["postPage"]);
-  if (!isTheme(theme)) invalid("Select a supported theme.", ["theme"]);
-  if (!isIntegerAtLeast(step, 1) || step > 10) invalid("Enter a step from 1 to 10.", ["step"]);
-  return { count, search, postPage, theme, step };
-});
 
 function isNumber(input: unknown): input is number {
   return typeof input === "number" && Number.isFinite(input);

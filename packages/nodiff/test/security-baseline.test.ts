@@ -54,7 +54,7 @@ describe("security baseline", () => {
 
   test("keeps public API reads isolated from demo auth headers", () => {
     const state = readRepoFile("apps/demo/src/state.ts");
-    const publicApi = state.match(/export const publicApi = createApi\(\{[\s\S]*?\n\}\);/)?.[0];
+    const publicApi = state.match(/const publicApi = createApi\(\{[\s\S]*?\n\}\);/)?.[0];
     const sessionApi = state.match(/export const sessionApi = createApi\(\{[\s\S]*?\n\}\);/)?.[0];
 
     expect(publicApi).toContain('baseUrl: "https://jsonplaceholder.typicode.com"');
@@ -67,10 +67,9 @@ describe("security baseline", () => {
   });
 
   test("keeps visible demo errors redacted", () => {
-    const state = readRepoFile("apps/demo/src/state.ts");
     const postsPage = readRepoFile("apps/demo/src/pages/PostsPage.tsx");
 
-    expect(state).toContain("safeErrorMessage(resource.error)");
+    expect(postsPage).toContain("safeErrorMessage(resource.error)");
     expect(postsPage).toContain("safeErrorMessage(error)");
     expect(postsPage).not.toContain("error.message");
   });

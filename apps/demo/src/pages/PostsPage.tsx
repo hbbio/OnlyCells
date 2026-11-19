@@ -1,19 +1,51 @@
 import {
   bind,
   For,
-  type ReadableCell,
+  type ResourceState,
   ResourceView,
   safeErrorMessage,
   text,
   view,
   when,
 } from "@nodiffjs/core";
+import type { AnyCell } from "@okcontract/cells";
 import { component } from "../cells";
 import { Badge, PageHeader, SectionTitle } from "../components";
+import { type PostFilters, postFilters } from "../preferences";
 import type { Post } from "../schemas";
-import { apiCache, posts, postsState, preferences, readPostsVm, type PostsVm } from "../state";
+import { bustPostsCache, posts, refreshPosts } from "../state";
 
-type PostsModel = { model: ReadableCell<PostsVm> };
+const pageSize = 6;
+
+function readPostsVm(resource: ResourceState<Post[]>, filters: PostFilters) {
+  const search = filters.search.trim().toLowerCase();
+  const all = resource.data ?? [];
+  const filtered = search
+    ? all.filter((post) => `${post.title} ${post.body}`.toLowerCase().includes(search))
+    : all;
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const page = Math.min(filters.postPage, pageCount);
+  const offset = (page - 1) * pageSize;
+  const pageEnd = Math.min(offset + pageSize, filtered.length);
+
+  return {
+    status: resource.status,
+    loading: resource.loading,
+    stale: resource.stale,
+    updatedAt: resource.updatedAt,
+    error: resource.error ? safeErrorMessage(resource.error) : null,
+    total: all.length,
+    filtered: filtered.length,
+    search,
+    page,
+    pageCount,
+    pageStart: filtered.length === 0 ? 0 : offset + 1,
+    pageEnd,
+    visible: filtered.slice(offset, pageEnd),
+  };
+}
+
+type PostsModel = { model: AnyCell<ReturnType<typeof readPostsVm>, boolean, true> };
 
 const StatusLine = component("StatusLine", (_proxy, { model }: PostsModel) => {
   return (
@@ -53,7 +85,7 @@ const StatusLine = component("StatusLine", (_proxy, { model }: PostsModel) => {
 });
 
 const PostsToolbar = component("PostsToolbar", (proxy) => {
-  const refreshing = proxy.map([postsState], (state) => state.loading, "refreshing", true);
+  const refreshing = proxy.map([posts], (state) => state.loading, "refreshing", true);
 
   return (
     <div class="button-group">
@@ -64,18 +96,11 @@ const PostsToolbar = component("PostsToolbar", (proxy) => {
           aria: { busy: loading },
           title: loading ? "Refreshing validated posts" : "Refresh posts",
         }))}
-        onClick={() => void posts.refresh()}
+        onClick={() => void refreshPosts()}
       >
         Refresh
       </button>
-      <button
-        onClick={() => {
-          apiCache.remove("posts");
-          void posts.refresh();
-        }}
-      >
-        Bust cache
-      </button>
+      <button onClick={() => void bustPostsCache()}>Bust cache</button>
     </div>
   );
 });
@@ -150,8 +175,8 @@ const PostsPagination = component("PostsPagination", (_proxy, { model }: PostsMo
       if (state.pageCount <= 1) return null;
 
       const setPage = (page: number) =>
-        preferences.update((prefs) => ({
-          ...prefs,
+        postFilters.update((filters) => ({
+          ...filters,
           postPage: Math.min(Math.max(1, page), state.pageCount),
         }));
 
@@ -177,7 +202,7 @@ const PostsPagination = component("PostsPagination", (_proxy, { model }: PostsMo
             </button>
           </div>
           <small>
-            {state.pageSize} posts per page, {state.pageCount} pages
+            {pageSize} posts per page, {state.pageCount} pages
           </small>
         </nav>
       );
@@ -186,7 +211,7 @@ const PostsPagination = component("PostsPagination", (_proxy, { model }: PostsMo
 });
 
 export const PostsPage = component("PostsPage", (proxy) => {
-  const model = proxy.map([postsState, preferences], readPostsVm, "posts view", true);
+  const model = proxy.map([posts, postFilters], readPostsVm, "posts view", true);
 
   return (
     <section class="page">
@@ -204,7 +229,7 @@ export const PostsPage = component("PostsPage", (proxy) => {
             placeholder="Try album, photo, dolorem..."
             aria-describedby="posts-status"
             use={bind.value(
-              preferences,
+              postFilters,
               (state) => state.search,
               (search) => ({ search, postPage: 1 }),
             )}
@@ -218,7 +243,7 @@ export const PostsPage = component("PostsPage", (proxy) => {
       </SectionTitle>
 
       <ResourceView
-        resource={postsState}
+        resource={posts}
         equality={(previous, next) => previous.data !== null && next.data !== null}
         pending={() => (
           <p class="notice" role="status">

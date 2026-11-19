@@ -1,12 +1,7 @@
 import { addCleanup, type Child, fragment, withRenderCleanup } from "@nodiffjs/core";
-import { Sheet, SheetProxy, type ValueCell } from "@okcontract/cells";
+import { Sheet, SheetProxy } from "@okcontract/cells";
 
 export const sheet = new Sheet(Object.is);
-
-export function controllerCell<T>(name: string): ValueCell<T> {
-  // The controller sets its first snapshot before this cell is read or subscribed.
-  return sheet.new<T | undefined>(undefined, undefined, name) as ValueCell<T>;
-}
 
 let collectionScheduled = false;
 

@@ -2,13 +2,7 @@ import { Sheet } from "@okcontract/cells";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { jsx, mount } from "../src/dom";
 import { configureSecurityPolicy } from "../src/security";
-import {
-  createCellStore,
-  bind,
-  type ClassBinding,
-  type PropsBinding,
-  type StyleBinding,
-} from "../src/store";
+import { bind, type ClassBinding, type PropsBinding, type StyleBinding } from "../src/store";
 import { installDom } from "./test-dom";
 
 type BindingState = {
@@ -24,8 +18,8 @@ type BindingState = {
   files: FileList | null;
 };
 
-function createBindingStore() {
-  return createCellStore<BindingState>(() => ({
+function createBindingCell() {
+  return new Sheet(Object.is).new<BindingState>({
     style: { color: "red", backgroundColor: "white" },
     classes: { active: true, hidden: false },
     userId: "123",
@@ -36,7 +30,7 @@ function createBindingStore() {
     color: "blue",
     selected: ["a", "c"],
     files: null,
-  }));
+  });
 }
 
 describe("bind helpers", () => {
@@ -98,18 +92,18 @@ describe("bind helpers", () => {
   });
 
   test("binds style, classes, dataset, aria, and properties", () => {
-    const store = createBindingStore();
+    const cell = createBindingCell();
 
     const unmount = mount(
       "#app",
       jsx("div", {
         class: "static",
         use: [
-          bind.style(store, (state) => state.style),
-          bind.classes(store, (state) => state.classes),
-          bind.dataset("user-id", store, (state) => state.userId),
-          bind.aria("busy", store, (state) => state.busy),
-          bind.prop<BindingState, string, HTMLElement>("title", store, (state) => state.title),
+          bind.style(cell, (state) => state.style),
+          bind.classes(cell, (state) => state.classes),
+          bind.dataset("user-id", cell, (state) => state.userId),
+          bind.aria("busy", cell, (state) => state.busy),
+          bind.prop<BindingState, string, HTMLElement>("title", cell, (state) => state.title),
         ],
         children: "Bound",
       }),
@@ -125,13 +119,14 @@ describe("bind helpers", () => {
     expect(div.getAttribute("aria-busy")).toBe("true");
     expect(div.title).toBe("Initial");
 
-    store.setState({
+    cell.update((state) => ({
+      ...state,
       style: { color: "blue", zIndex: 2 },
       classes: ["selected", "static"],
       userId: null,
       busy: false,
       title: "Updated",
-    });
+    }));
 
     expect(div.style.color).toBe("blue");
     expect(div.style.backgroundColor).toBe("");
@@ -143,7 +138,7 @@ describe("bind helpers", () => {
     expect(div.hasAttribute("aria-busy")).toBe(false);
     expect(div.title).toBe("Updated");
 
-    store.setState({ style: "display: none; color: green;" });
+    cell.update((state) => ({ ...state, style: "display: none; color: green;" }));
     expect(div.style.display).toBe("none");
     expect(div.style.color).toBe("green");
 
@@ -151,7 +146,7 @@ describe("bind helpers", () => {
   });
 
   test("binds grouped props and cleans removed keys", () => {
-    const store = createCellStore(() => ({
+    const cell = new Sheet(Object.is).new({
       props: {
         disabled: true,
         title: "Initial",
@@ -162,13 +157,13 @@ describe("bind helpers", () => {
         attributes: { "data-extra": 7 },
         textContent: "Loading",
       },
-    }));
+    });
 
     const unmount = mount(
       "#app",
       jsx("button", {
         class: "static",
-        use: bind.props(store, (state) => state.props),
+        use: bind.props(cell, (state) => state.props),
       }),
     );
 
@@ -187,7 +182,7 @@ describe("bind helpers", () => {
     expect(button.getAttribute("data-extra")).toBe("7");
     expect(button.textContent).toBe("Loading");
 
-    store.setState({
+    cell.set({
       props: {
         disabled: false,
         className: ["selected"],
@@ -216,25 +211,25 @@ describe("bind helpers", () => {
     expect(button.textContent).toBe("Ready");
 
     unmount();
-    store.setState({ props: { disabled: true, textContent: "After cleanup" } });
+    cell.set({ props: { disabled: true, textContent: "After cleanup" } });
 
     expect(button.disabled).toBe(false);
     expect(button.textContent).toBe("Ready");
   });
 
   test("binds grouped string styles and fallback attributes", () => {
-    const store = createCellStore(() => ({
+    const cell = new Sheet(Object.is).new({
       props: {
         style: "display: none; color: red;",
         custom: "yes",
         "stroke-width": 2,
       } satisfies PropsBinding,
-    }));
+    });
 
     const unmount = mount(
       "#app",
       jsx("div", {
-        use: bind.props(store, (state) => state.props),
+        use: bind.props(cell, (state) => state.props),
       }),
     );
 
@@ -244,7 +239,7 @@ describe("bind helpers", () => {
     expect(div.getAttribute("custom")).toBe("yes");
     expect(div.getAttribute("stroke-width")).toBe("2");
 
-    store.setState({
+    cell.set({
       props: {
         style: { color: "blue" },
         "stroke-width": null,
@@ -262,25 +257,25 @@ describe("bind helpers", () => {
   test("binds text, single classes, attribute variants, plain dataset keys, and style resets", () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
-    const store = createCellStore(() => ({
+    const cell = new Sheet(Object.is).new({
       label: null as string | null,
       active: false,
       flag: false,
       attr: 7 as unknown,
       userId: "123" as string | null,
       style: "display: none; color: red;" as StyleBinding,
-    }));
+    });
 
     const unmount = mount(
       "#app",
       jsx("output", {
         use: [
-          bind.text(store, (state) => state.label),
-          bind.class("active", store, (state) => state.active),
-          bind.attr("data-flag", store, (state) => state.flag),
-          bind.attr("data-value", store, (state) => state.attr),
-          bind.dataset("userId", store, (state) => state.userId),
-          bind.style(store, (state) => state.style),
+          bind.text(cell, (state) => state.label),
+          bind.class("active", cell, (state) => state.active),
+          bind.attr("data-flag", cell, (state) => state.flag),
+          bind.attr("data-value", cell, (state) => state.attr),
+          bind.dataset("userId", cell, (state) => state.userId),
+          bind.style(cell, (state) => state.style),
         ],
       }),
     );
@@ -293,7 +288,7 @@ describe("bind helpers", () => {
     expect(output.dataset.userId).toBe("123");
     expect(output.style.display).toBe("none");
 
-    store.setState({
+    cell.set({
       label: "Ready",
       active: true,
       flag: true,
@@ -310,27 +305,27 @@ describe("bind helpers", () => {
     expect(output.style.display).toBe("");
     expect(output.style.color).toBe("blue");
 
-    store.setState({ attr: { ok: true } });
+    cell.update((state) => ({ ...state, attr: { ok: true } }));
     expect(output.getAttribute("data-value")).toBe('{"ok":true}');
 
-    store.setState({ attr: circular });
+    cell.update((state) => ({ ...state, attr: circular }));
     expect(output.getAttribute("data-value")).toBe("[object Object]");
 
-    store.setState({ attr: Symbol("flag") });
+    cell.update((state) => ({ ...state, attr: Symbol("flag") }));
     expect(output.getAttribute("data-value")).toBe("Symbol(flag)");
 
     unmount();
   });
 
   test("binds numeric inputs and removes listeners on cleanup", () => {
-    const store = createBindingStore();
+    const cell = createBindingCell();
 
     const unmount = mount(
       "#app",
       jsx("input", {
         type: "number",
         use: bind.number(
-          store,
+          cell,
           (state) => state.age,
           (age) => ({ age }),
         ),
@@ -340,36 +335,36 @@ describe("bind helpers", () => {
     const input = document.querySelector("input") as HTMLInputElement;
     expect(input.value).toBe("1");
 
-    store.setState({ age: 7 });
+    cell.update((state) => ({ ...state, age: 7 }));
     expect(input.value).toBe("7");
 
     input.value = "42";
     input.dispatchEvent(new InputEvent("input", { bubbles: true }));
-    expect(store.getState().age).toBe(42);
+    expect(cell.value?.age).toBe(42);
 
     input.value = "";
     input.dispatchEvent(new InputEvent("input", { bubbles: true }));
-    expect(store.getState().age).toBeNull();
+    expect(cell.value?.age).toBeNull();
 
     unmount();
 
     input.value = "9";
     input.dispatchEvent(new InputEvent("input", { bubbles: true }));
-    expect(store.getState().age).toBeNull();
+    expect(cell.value?.age).toBeNull();
   });
 
   test("binds string values and checked state with cleanup", () => {
-    const store = createCellStore(() => ({
+    const cell = new Sheet(Object.is).new({
       title: "Initial",
       accepted: false,
-    }));
+    });
     let valueCommits = 0;
     let checkedCommits = 0;
 
     const unmount = mount("#app", [
       jsx("input", {
         use: bind.value(
-          store,
+          cell,
           (state) => state.title,
           (value) => {
             valueCommits += 1;
@@ -382,7 +377,7 @@ describe("bind helpers", () => {
       jsx("input", {
         type: "checkbox",
         use: bind.checked(
-          store,
+          cell,
           (state) => state.accepted,
           (checked) => {
             checkedCommits += 1;
@@ -401,19 +396,19 @@ describe("bind helpers", () => {
 
     textInput!.value = "done";
     textInput!.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(store.getState().title).toBe("DONE");
+    expect(cell.value?.title).toBe("DONE");
 
     textInput!.value = "skip";
     textInput!.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(store.getState().title).toBe("DONE");
+    expect(cell.value?.title).toBe("DONE");
 
     checkbox!.checked = true;
     checkbox!.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(store.getState().accepted).toBe(true);
+    expect(cell.value?.accepted).toBe(true);
 
     checkbox!.checked = false;
     checkbox!.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(store.getState().accepted).toBe(true);
+    expect(cell.value?.accepted).toBe(true);
 
     unmount();
 
@@ -427,7 +422,7 @@ describe("bind helpers", () => {
   });
 
   test("binds checkbox groups", () => {
-    const store = createBindingStore();
+    const cell = createBindingCell();
 
     const unmount = mount(
       "#app",
@@ -435,7 +430,7 @@ describe("bind helpers", () => {
         type: "checkbox",
         value: "red",
         use: bind.checkedGroup(
-          store,
+          cell,
           (state) => state.choices,
           (choices) => ({ choices }),
         ),
@@ -445,22 +440,22 @@ describe("bind helpers", () => {
     const input = document.querySelector("input") as HTMLInputElement;
     expect(input.checked).toBe(true);
 
-    store.setState({ choices: ["blue"] });
+    cell.update((state) => ({ ...state, choices: ["blue"] }));
     expect(input.checked).toBe(false);
 
     input.checked = true;
     input.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(store.getState().choices).toEqual(["blue", "red"]);
+    expect(cell.value?.choices).toEqual(["blue", "red"]);
 
     input.checked = false;
     input.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(store.getState().choices).toEqual(["blue"]);
+    expect(cell.value?.choices).toEqual(["blue"]);
 
     unmount();
   });
 
   test("binds radio groups", () => {
-    const store = createBindingStore();
+    const cell = createBindingCell();
 
     const unmount = mount("#app", [
       jsx("input", {
@@ -468,7 +463,7 @@ describe("bind helpers", () => {
         name: "color",
         value: "red",
         use: bind.radio(
-          store,
+          cell,
           (state) => state.color,
           (color) => ({ color }),
         ),
@@ -478,7 +473,7 @@ describe("bind helpers", () => {
         name: "color",
         value: "blue",
         use: bind.radio(
-          store,
+          cell,
           (state) => state.color,
           (color) => ({ color }),
         ),
@@ -491,21 +486,21 @@ describe("bind helpers", () => {
 
     red!.checked = true;
     red!.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(store.getState().color).toBe("red");
+    expect(cell.value?.color).toBe("red");
     expect(blue?.checked).toBe(false);
 
     unmount();
   });
 
   test("binds multiple select values", () => {
-    const store = createBindingStore();
+    const cell = createBindingCell();
 
     const unmount = mount(
       "#app",
       jsx("select", {
         multiple: true,
         use: bind.selected(
-          store,
+          cell,
           (state) => state.selected,
           (selected) => ({ selected }),
         ),
@@ -524,26 +519,26 @@ describe("bind helpers", () => {
         .map((option) => option.value);
     expect(selectedValues()).toEqual(["a", "c"]);
 
-    store.setState({ selected: ["b"] });
+    cell.update((state) => ({ ...state, selected: ["b"] }));
     expect(selectedValues()).toEqual(["b"]);
 
     select.options[0]!.selected = true;
     select.options[1]!.selected = true;
     select.options[2]!.selected = false;
     select.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(store.getState().selected).toEqual(["a", "b"]);
+    expect(cell.value?.selected).toEqual(["a", "b"]);
 
     unmount();
   });
 
   test("binds file inputs", () => {
-    const store = createBindingStore();
+    const cell = createBindingCell();
 
     const unmount = mount(
       "#app",
       jsx("input", {
         type: "file",
-        use: bind.files(store, (files) => ({ files })),
+        use: bind.files(cell, (files) => ({ files })),
       }),
     );
 
@@ -561,7 +556,7 @@ describe("bind helpers", () => {
     });
 
     input.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(store.getState().files?.item(0)?.name).toBe("hello.txt");
+    expect(cell.value?.files?.item(0)?.name).toBe("hello.txt");
 
     unmount();
 
@@ -570,26 +565,26 @@ describe("bind helpers", () => {
       value: null,
     });
     input.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(store.getState().files).toBe(files);
+    expect(cell.value?.files).toBe(files);
   });
 
   test("blocks unsafe URL and CSS values in bindings", () => {
-    const store = createCellStore(() => ({
+    const cell = new Sheet(Object.is).new({
       href: "https://example.test",
       srcset: "/small.png 1x, /large.png 2x",
       style: { color: "green" } as StyleBinding,
-    }));
+    });
 
     const unmount = mount("#app", [
       jsx("a", {
         use: [
-          bind.attr("href", store, (state) => state.href),
-          bind.style(store, (state) => state.style),
+          bind.attr("href", cell, (state) => state.href),
+          bind.style(cell, (state) => state.style),
         ],
         children: "Safe",
       }),
       jsx("img", {
-        use: bind.attr("srcset", store, (state) => state.srcset),
+        use: bind.attr("srcset", cell, (state) => state.srcset),
       }),
     ]);
 
@@ -599,29 +594,34 @@ describe("bind helpers", () => {
     expect(image.getAttribute("srcset")).toBe("/small.png 1x, /large.png 2x");
     expect(link.style.color).toBe("green");
 
-    expect(() => store.setState({ href: "javascript:alert(1)" })).toThrow("disallowed scheme");
-    expect(() => store.setState({ srcset: "/safe.png 1x, javascript:alert(1) 2x" })).toThrow(
+    expect(() => cell.update((state) => ({ ...state, href: "javascript:alert(1)" }))).toThrow(
       "disallowed scheme",
     );
     expect(() =>
-      store.setState({ style: { backgroundImage: "url(javascript:alert(1))" } }),
+      cell.update((state) => ({ ...state, srcset: "/safe.png 1x, javascript:alert(1) 2x" })),
+    ).toThrow("disallowed scheme");
+    expect(() =>
+      cell.update((state) => ({
+        ...state,
+        style: { backgroundImage: "url(javascript:alert(1))" },
+      })),
     ).toThrow("unsafe CSS");
 
     unmount();
   });
 
   test("blocks unsafe grouped props", () => {
-    const store = createCellStore(() => ({
+    const cell = new Sheet(Object.is).new({
       props: {
         href: "https://example.test",
         style: { color: "green" },
       } satisfies PropsBinding,
-    }));
+    });
 
     const unmount = mount(
       "#app",
       jsx("a", {
-        use: bind.props(store, (state) => state.props),
+        use: bind.props(cell, (state) => state.props),
         children: "Safe",
       }),
     );
@@ -630,19 +630,15 @@ describe("bind helpers", () => {
     expect(link.href).toBe("https://example.test/");
     expect(link.style.color).toBe("green");
 
-    expect(() => store.setState({ props: { href: "javascript:alert(1)" } })).toThrow(
-      "disallowed scheme",
-    );
+    expect(() => cell.set({ props: { href: "javascript:alert(1)" } })).toThrow("disallowed scheme");
     expect(() =>
-      store.setState({
+      cell.set({
         props: { style: { backgroundImage: "url(javascript:alert(1))" } },
       }),
     ).toThrow("unsafe CSS");
-    expect(() => store.setState({ props: { onclick: "alert(1)" } })).toThrow(
-      "Event handler attributes",
-    );
+    expect(() => cell.set({ props: { onclick: "alert(1)" } })).toThrow("Event handler attributes");
     expect(() =>
-      store.setState({
+      cell.set({
         props: {
           attributes: {
             srcset: "/safe.png 1x, javascript:alert(1) 2x",
@@ -670,9 +666,9 @@ describe("bind helpers", () => {
   });
 
   test("blocks raw HTML DOM sink property bindings", () => {
-    const rawProperty = createCellStore(() => ({
+    const rawProperty = new Sheet(Object.is).new({
       html: "<img src=x onerror=alert(1)>",
-    }));
+    });
 
     expect(() =>
       jsx("div", {
@@ -690,11 +686,11 @@ describe("bind helpers", () => {
       }),
     ).toThrow("Raw HTML DOM sink");
 
-    const grouped = createCellStore(() => ({
+    const grouped = new Sheet(Object.is).new({
       props: {
         title: "Safe",
       } satisfies PropsBinding,
-    }));
+    });
 
     const unmount = mount(
       "#app",
@@ -704,7 +700,7 @@ describe("bind helpers", () => {
     );
 
     expect(() =>
-      grouped.setState({
+      grouped.set({
         props: {
           innerHTML: "<img src=x onerror=alert(1)>",
         },

@@ -1,18 +1,5 @@
 import { expect, test } from "bun:test";
-import { LoginSchema, PostsSchema, PreferencesSchema } from "../src/schemas";
-
-test("restores preferences saved before page and step fields existed", () => {
-  expect(PreferencesSchema.parse({ count: 2, search: "photo", theme: "night" })).toEqual({
-    count: 2,
-    search: "photo",
-    theme: "night",
-    postPage: 1,
-    step: 1,
-  });
-  expect(PreferencesSchema.safeParse({ count: 2, search: "", theme: "unknown" }).success).toBe(
-    false,
-  );
-});
+import { LoginSchema, PostsSchema } from "../src/schemas";
 
 test("validates each post and selects its known fields", () => {
   const post = { id: 1, userId: 2, title: "Update", body: "Ready" };

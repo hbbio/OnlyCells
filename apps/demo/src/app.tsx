@@ -1,9 +1,10 @@
-import { bind, createRouter, type LinkProps, type RouterState } from "@nodiffjs/core";
-import { component, controllerCell } from "./cells";
+import { bind, createRouter, type LinkProps } from "@nodiffjs/core";
+import { component, sheet } from "./cells";
 import { AuthPage } from "./pages/AuthPage";
 import { CachePage } from "./pages/CachePage";
 import { HomePage } from "./pages/HomePage";
 import { PostsPage } from "./pages/PostsPage";
+import { theme } from "./preferences";
 
 const NotFound = component("NotFound", () => {
   return (
@@ -23,7 +24,6 @@ const RouteError = component("RouteError", () => {
   );
 });
 
-export const routeState = controllerCell<RouterState>("route");
 export const router = createRouter(
   [
     { path: "/", title: "NoDiff", component: HomePage },
@@ -33,7 +33,7 @@ export const router = createRouter(
   ],
   {
     mode: "hash",
-    cell: routeState,
+    sheet,
     fallback: NotFound,
     error: RouteError,
   },
@@ -41,22 +41,25 @@ export const router = createRouter(
 
 const Link = component("Link", (_proxy, props: LinkProps) => router.Link(props));
 
+const bindTheme = () =>
+  theme.subscribe((value) => {
+    if (value === "system") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.dataset.theme = value;
+  });
+
 export const App = component("App", (proxy) => {
   const drawerOpen = proxy.new(false, "drawer open");
 
   return (
-    <div class="app-shell" use={() => router.start()}>
+    <div class="app-shell" use={[router.start, bindTheme]}>
       <input
         id="app-drawer"
         type="checkbox"
         class="sidebar-toggle"
         aria-label="Show navigation"
         aria-controls="app-sidebar"
-        use={bind.checked(
-          drawerOpen,
-          (open) => open,
-          (checked) => checked,
-        )}
+        use={bind.prop("checked", drawerOpen)}
+        onChange={(event) => drawerOpen.set(event.currentTarget.checked)}
       />
       <header class="mobile-bar">
         <label for="app-drawer" class="menu-toggle">

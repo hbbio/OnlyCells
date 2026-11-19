@@ -15,7 +15,7 @@ import {
   trustedHTML,
 } from "../src/dom";
 import { configureSecurityPolicy, type SecurityViolation } from "../src/security";
-import { createCellStore, text, view } from "../src/store";
+import { text, view } from "../src/store";
 import { installDom } from "./test-dom";
 
 describe("DOM runtime", () => {
@@ -108,21 +108,21 @@ describe("DOM runtime", () => {
   });
 
   test("text bindings unsubscribe when their node is cleaned up", () => {
-    const counter = createCellStore<{ count: number }>(() => ({ count: 0 }));
+    const counter = new Sheet(Object.is).new<{ count: number }>({ count: 0 });
     const countText = text(counter, (state) => state.count);
     const unmount = mount("#app", jsx("p", { children: ["Count: ", countText] }));
 
-    counter.setState({ count: 1 });
+    counter.set({ count: 1 });
     expect(document.querySelector("#app")?.textContent).toBe("Count: 1");
 
     unmount();
-    counter.setState({ count: 2 });
+    counter.set({ count: 2 });
 
     expect(countText.data).toBe("1");
   });
 
   test("view redraws bounded regions and cleans replaced nodes", () => {
-    const toggle = createCellStore<{ enabled: boolean }>(() => ({ enabled: true }));
+    const toggle = new Sheet(Object.is).new<{ enabled: boolean }>({ enabled: true });
     let cleanups = 0;
 
     const unmount = mount(
@@ -144,7 +144,7 @@ describe("DOM runtime", () => {
 
     expect(document.querySelector("#app")?.textContent).toBe("Enabled");
 
-    toggle.setState({ enabled: false });
+    toggle.set({ enabled: false });
     expect(cleanups).toBe(1);
     expect(document.querySelector("#app")?.textContent).toBe("Disabled");
 
@@ -396,7 +396,7 @@ describe("DOM runtime", () => {
       onViolation: (violation) => violations.push(violation),
     });
     const secretError = new Error("database password=secret-token");
-    const store = createCellStore(() => ({ label: "initial" }));
+    const store = new Sheet(Object.is).new({ label: "initial" });
     let abandoned: Text | undefined;
 
     const unmount = mount(
@@ -413,7 +413,7 @@ describe("DOM runtime", () => {
     const textContent = document.querySelector("#app")?.textContent ?? "";
     expect(textContent).toBe("Something went wrong.");
     expect(textContent).not.toContain("secret-token");
-    store.setState({ label: "updated" });
+    store.set({ label: "updated" });
     expect(abandoned?.data).toBe("initial");
     expect(seen).toEqual(["database password=secret-token"]);
     expect(violations).toEqual([

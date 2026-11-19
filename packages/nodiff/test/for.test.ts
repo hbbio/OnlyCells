@@ -1,6 +1,7 @@
+import { Sheet } from "@okcontract/cells";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { fragment, jsx, mount } from "../src/dom";
-import { createCellStore, For } from "../src/store";
+import { For } from "../src/store";
 import { installDom } from "./test-dom";
 
 type Item = {
@@ -30,7 +31,7 @@ describe("For", () => {
   test("moves keyed rows without re-rendering stable item identities", () => {
     const alpha: Item = { id: "a", label: "Alpha" };
     const beta: Item = { id: "b", label: "Beta" };
-    const items = createCellStore<{ items: Item[] }>(() => ({ items: [alpha, beta] }));
+    const items = new Sheet(Object.is).new<{ items: Item[] }>({ items: [alpha, beta] });
     let renders = 0;
 
     const unmount = mount(
@@ -53,7 +54,7 @@ describe("For", () => {
     expect(orderedIds()).toEqual(["a", "b"]);
     expect(renders).toBe(2);
 
-    items.setState({ items: [beta, alpha] });
+    items.set({ items: [beta, alpha] });
 
     expect(orderedIds()).toEqual(["b", "a"]);
     expect(renders).toBe(2);
@@ -65,7 +66,7 @@ describe("For", () => {
   test("re-renders changed item identities, cleans removed rows, and shows fallback", () => {
     const initial: Item = { id: "a", label: "Alpha" };
     const updated: Item = { id: "a", label: "Updated alpha" };
-    const items = createCellStore<{ items: Item[] }>(() => ({ items: [initial] }));
+    const items = new Sheet(Object.is).new<{ items: Item[] }>({ items: [initial] });
     let cleanups = 0;
 
     const unmount = mount(
@@ -88,11 +89,11 @@ describe("For", () => {
 
     expect(document.querySelector("#app")?.textContent).toBe("Alpha");
 
-    items.setState({ items: [updated] });
+    items.set({ items: [updated] });
     expect(document.querySelector("#app")?.textContent).toBe("Updated alpha");
     expect(cleanups).toBe(1);
 
-    items.setState({ items: [] });
+    items.set({ items: [] });
     expect(document.querySelector("#app")?.textContent).toBe("Empty");
     expect(cleanups).toBe(2);
 
@@ -100,12 +101,12 @@ describe("For", () => {
   });
 
   test("rejects duplicate keys before mutating the rendered list", () => {
-    const items = createCellStore<{ items: Item[] }>(() => ({
+    const items = new Sheet(Object.is).new<{ items: Item[] }>({
       items: [
         { id: "a", label: "Alpha" },
         { id: "a", label: "Again" },
       ],
-    }));
+    });
 
     expect(() =>
       For({
@@ -118,9 +119,9 @@ describe("For", () => {
   });
 
   test("renders fragment rows and labels unserializable duplicate keys", () => {
-    const items = createCellStore<{ items: Item[] }>(() => ({
+    const items = new Sheet(Object.is).new<{ items: Item[] }>({
       items: [{ id: "a", label: "Alpha" }],
-    }));
+    });
 
     const unmount = mount(
       "#app",
@@ -144,12 +145,12 @@ describe("For", () => {
 
     const key: Record<string, unknown> = {};
     key.self = key;
-    const duplicates = createCellStore<{ items: Item[] }>(() => ({
+    const duplicates = new Sheet(Object.is).new<{ items: Item[] }>({
       items: [
         { id: "a", label: "Alpha" },
         { id: "b", label: "Beta" },
       ],
-    }));
+    });
 
     expect(() =>
       For({

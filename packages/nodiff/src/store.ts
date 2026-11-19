@@ -1,4 +1,4 @@
-import { isObject, Sheet } from "@okcontract/cells";
+import { type AnyCell, isObject, type ValueCell } from "@okcontract/cells";
 import { addCleanup, clearBetween, removeNode } from "./lifecycle.ts";
 import {
   assertSafeCssValue,
@@ -9,106 +9,9 @@ import {
   toNodes,
 } from "./dom.ts";
 import type { ResourceState } from "./resource.ts";
+import { readCell } from "./state.ts";
 
 export type Equality<T> = (a: T, b: T) => boolean;
-
-export interface ReadableStore<T> {
-  getState(): T;
-  subscribe(listener: (state: T, previousState: T) => void): () => void;
-}
-
-export interface WritableStore<T> extends ReadableStore<T> {
-  setState(partial: Partial<T> | T | ((state: T) => Partial<T> | T), replace?: boolean): void;
-}
-
-export interface ReadableCell<T> {
-  readonly value: T | undefined;
-  subscribe(listener: (value: T) => void): () => void;
-}
-
-export interface WritableCell<T> extends ReadableCell<T> {
-  set(value: NoInfer<T>): void | Promise<void>;
-}
-
-export type StateSource<T> = ReadableStore<T> | ReadableCell<T>;
-export type WritableStateSource<T> = WritableStore<T> | WritableCell<T>;
-
-function readState<T>(source: StateSource<T>): T {
-  if ("getState" in source) return source.getState();
-  const value = source.value;
-  if (value === undefined) throw new Error("Expected an initialized cell.");
-  return value;
-}
-
-function subscribeState<T>(source: StateSource<T>, listener: (value: T, previous: T) => void) {
-  if ("getState" in source) return source.subscribe(listener);
-  let previous = readState(source);
-  let subscribing = true;
-  const unsubscribe = source.subscribe((value) => {
-    if (subscribing && Object.is(previous, value)) return;
-    const old = previous;
-    previous = value;
-    listener(value, old);
-  });
-  subscribing = false;
-  return unsubscribe;
-}
-
-function mergeState<T>(state: T, patch: Partial<T> | T, replace?: boolean): T {
-  const replaceState = replace ?? (typeof patch !== "object" || patch === null);
-  return replaceState ? (patch as T) : Object.assign({}, state, patch);
-}
-
-function writeState<T>(source: WritableStateSource<T>, patch: Partial<T> | T): void {
-  if ("setState" in source) {
-    source.setState(patch);
-    return;
-  }
-  const current = readState(source);
-  source.set(isObject(current) && isObject(patch) ? { ...current, ...patch } : (patch as T));
-}
-
-export interface CellStore<T> extends WritableStore<T> {
-  getInitialState(): T;
-}
-
-export function createCellStore<T>(
-  initialize: (set: WritableStore<T>["setState"]) => T,
-  cell?: WritableCell<T>,
-): CellStore<T> {
-  const initial = initialize(setState);
-  // The compatibility store can hold values that Cells would interpret as pending work or pointers.
-  const storage = cell
-    ? { kind: "native" as const, cell }
-    : { kind: "boxed" as const, cell: new Sheet(Object.is).new({ state: initial }) };
-  if (storage.kind === "native") storage.cell.set(initial);
-
-  function getState(): T {
-    return storage.kind === "boxed" ? readState(storage.cell).state : readState(storage.cell);
-  }
-
-  function setState(partial: Partial<T> | T | ((state: T) => Partial<T> | T), replace?: boolean) {
-    const state = getState();
-    const next =
-      typeof partial === "function" ? (partial as (state: T) => Partial<T> | T)(state) : partial;
-    if (Object.is(state, next)) return;
-    const snapshot = mergeState(state, next, replace);
-    if (storage.kind === "boxed") storage.cell.set({ state: snapshot });
-    else storage.cell.set(snapshot);
-  }
-
-  return {
-    getState,
-    getInitialState: () => initial,
-    setState,
-    subscribe(listener) {
-      return storage.kind === "boxed"
-        ? subscribeState(storage.cell, (value, previous) => listener(value.state, previous.state))
-        : subscribeState(storage.cell, listener);
-    },
-  };
-}
-
 export type Selector<TState, TValue> = (state: TState) => TValue;
 export type StyleBinding = string | Record<string, string | number | null | undefined>;
 export type ClassBinding = string | readonly string[] | Record<string, boolean | null | undefined>;
@@ -123,122 +26,65 @@ export type PropsBinding = AttributeBinding & {
   attributes?: AttributeBinding | null | undefined;
   textContent?: string | number | boolean | null | undefined;
 };
-export type StoreState<TStore> = TStore extends ReadableStore<infer TState> ? TState : never;
-export type StoreStates<TStores extends readonly ReadableStore<unknown>[]> = {
-  [K in keyof TStores]: StoreState<TStores[K]>;
-};
 
 export function subscribeSelector<TState, TValue>(
-  store: StateSource<TState>,
+  cell: AnyCell<TState, boolean, boolean>,
   selector: Selector<TState, TValue>,
   listener: (value: TValue, previousValue: TValue, state: TState, previousState: TState) => void,
   equality: Equality<TValue> = Object.is,
 ): () => void {
-  let current = selector(readState(store));
-
-  return subscribeState(store, (state, previousState) => {
+  let previousState = readCell(cell);
+  let current = selector(previousState);
+  // Cells replay their current value when the subscription starts.
+  let subscribing = true;
+  const unsubscribe = cell.subscribe((state) => {
+    if (state instanceof Error || (subscribing && Object.is(previousState, state))) return;
+    const oldState = previousState;
+    previousState = state;
     const next = selector(state);
     if (equality(current, next)) return;
     const previous = current;
     current = next;
-    listener(next, previous, state, previousState);
+    listener(next, previous, state, oldState);
   });
+  subscribing = false;
+  return unsubscribe;
 }
 
-function readStoreStates<TStores extends readonly ReadableStore<unknown>[]>(
-  stores: TStores,
-): StoreStates<TStores> {
-  return stores.map((store) => store.getState()) as StoreStates<TStores>;
-}
-
-export function derivedStore<const TStores extends readonly ReadableStore<unknown>[], TValue>(
-  stores: TStores,
-  derive: (...states: StoreStates<TStores>) => TValue,
-  options: { equality?: Equality<TValue> } = {},
-): ReadableStore<TValue> {
-  const equality = options.equality ?? Object.is;
-  const listeners = new Set<(state: TValue, previousState: TValue) => void>();
-  let current = derive(...readStoreStates(stores));
-  let unsubscribes: Array<() => void> = [];
-
-  const recompute = (notify: boolean): TValue => {
-    const next = derive(...readStoreStates(stores));
-    if (equality(current, next)) return current;
-
-    const previous = current;
-    current = next;
-
-    if (notify) {
-      for (const listener of listeners) listener(current, previous);
-    }
-
-    return current;
-  };
-
-  const start = () => {
-    if (unsubscribes.length > 0) return;
-    recompute(false);
-    unsubscribes = stores.map((store) => store.subscribe(() => recompute(true)));
-  };
-
-  const stop = () => {
-    if (listeners.size > 0) return;
-    for (const unsubscribe of unsubscribes) unsubscribe();
-    unsubscribes = [];
-  };
-
-  return {
-    getState() {
-      return recompute(false);
-    },
-    subscribe(listener) {
-      listeners.add(listener);
-      start();
-      return () => {
-        listeners.delete(listener);
-        stop();
-      };
-    },
-  };
+function writeCell<T>(cell: ValueCell<T>, patch: Partial<T> | T): void {
+  const current = readCell(cell);
+  cell.set(isObject(current) && isObject(patch) ? { ...current, ...patch } : (patch as T));
 }
 
 export function effect<TState, TValue>(
-  store: StateSource<TState>,
+  cell: AnyCell<TState, boolean, boolean>,
   selector: Selector<TState, TValue>,
   run: (value: TValue, previousValue: TValue | undefined, state: TState) => void,
   equality?: Equality<TValue>,
 ): Action {
-  return (element) => {
-    let previous: TValue | undefined;
-    const initial = selector(readState(store));
-    run(initial, previous, readState(store));
-    previous = initial;
+  return () => {
+    const initial = selector(readCell(cell));
+    run(initial, undefined, readCell(cell));
 
-    const unsubscribe = subscribeSelector(
-      store,
+    return subscribeSelector(
+      cell,
       selector,
-      (value, oldValue, state) => {
-        previous = oldValue;
-        run(value, previous, state);
-      },
+      (value, previous, state) => run(value, previous, state),
       equality,
     );
-
-    void element;
-    return unsubscribe;
   };
 }
 
 export function text<TState, TValue>(
-  store: StateSource<TState>,
+  cell: AnyCell<TState, boolean, boolean>,
   selector: Selector<TState, TValue>,
   format: (value: TValue) => string = (value) =>
     value === null || value === undefined ? "" : String(value),
   equality?: Equality<TValue>,
 ): Text {
-  const node = document.createTextNode(format(selector(readState(store))));
+  const node = document.createTextNode(format(selector(readCell(cell))));
   const unsubscribe = subscribeSelector(
-    store,
+    cell,
     selector,
     (value) => {
       node.data = format(value);
@@ -250,7 +96,7 @@ export function text<TState, TValue>(
 }
 
 export function view<TState, TValue>(
-  store: StateSource<TState>,
+  cell: AnyCell<TState, boolean, boolean>,
   selector: Selector<TState, TValue>,
   render: (value: TValue, state: TState) => Child,
   options: { equality?: Equality<TValue> } = {},
@@ -268,10 +114,10 @@ export function view<TState, TValue>(
     }
   };
 
-  draw(selector(readState(store)), readState(store));
+  draw(selector(readCell(cell)), readCell(cell));
 
   const unsubscribe = subscribeSelector(
-    store,
+    cell,
     selector,
     (value, _oldValue, state) => draw(value, state),
     options.equality,
@@ -286,16 +132,16 @@ export function view<TState, TValue>(
 }
 
 export function when<TState>(
-  store: StateSource<TState>,
+  cell: AnyCell<TState, boolean, boolean>,
   predicate: Selector<TState, boolean>,
   yes: (state: TState) => Child,
   no?: (state: TState) => Child,
 ): DocumentFragment {
-  return view(store, predicate, (enabled, state) => (enabled ? yes(state) : (no?.(state) ?? null)));
+  return view(cell, predicate, (enabled, state) => (enabled ? yes(state) : (no?.(state) ?? null)));
 }
 
 export type ShowProps<TState, TValue> = {
-  store: StateSource<TState>;
+  store: AnyCell<TState, boolean, boolean>;
   when: Selector<TState, TValue>;
   children: Child | ((value: NonNullable<TValue>, state: TState) => Child);
   fallback?: Child | ((state: TState, value: TValue) => Child);
@@ -332,21 +178,14 @@ export function Show<TState, TValue>(props: ShowProps<TState, TValue>): Document
   );
 }
 
-export type ResourceStore<T> = StateSource<ResourceState<T>>;
-export type ResourceLike<T> = ResourceStore<T> | { store: ResourceStore<T> };
-
 export type ResourceViewProps<T> = {
-  resource: ResourceLike<T>;
+  resource: AnyCell<ResourceState<T>, boolean, boolean>;
   children: (data: T, state: ResourceState<T>) => Child;
   pending?: Child | ((state: ResourceState<T>) => Child);
   error?: Child | ((error: Error, state: ResourceState<T>) => Child);
   empty?: Child | ((state: ResourceState<T>) => Child);
   equality?: Equality<ResourceState<T>>;
 };
-
-function resourceStore<T>(resource: ResourceLike<T>): ResourceStore<T> {
-  return "store" in resource ? resource.store : resource;
-}
 
 function renderResourceSlot<T>(
   slot: Child | ((state: ResourceState<T>) => Child) | undefined,
@@ -366,9 +205,8 @@ function renderResourceError<T>(
 }
 
 export function ResourceView<T>(props: ResourceViewProps<T>): DocumentFragment {
-  const store = resourceStore(props.resource);
   return view(
-    store,
+    props.resource,
     (state) => state,
     (state) => {
       if (state.data !== null) return props.children(state.data, state);
@@ -386,13 +224,13 @@ export function Await<T>(props: ResourceViewProps<T>): DocumentFragment {
 }
 
 export function list<TState, TItem>(
-  store: StateSource<TState>,
+  cell: AnyCell<TState, boolean, boolean>,
   selector: Selector<TState, readonly TItem[]>,
   render: (item: TItem, index: number, items: readonly TItem[]) => Child,
   options: { equality?: Equality<readonly TItem[]> } = {},
 ): DocumentFragment {
   return view(
-    store,
+    cell,
     selector,
     (items) => items.map((item, index) => render(item, index, items)),
     options,
@@ -400,7 +238,7 @@ export function list<TState, TItem>(
 }
 
 export type ForProps<TState, TItem, TKey = unknown> = {
-  store: StateSource<TState>;
+  store: AnyCell<TState, boolean, boolean>;
   each: Selector<TState, readonly TItem[]>;
   by: (item: TItem, index: number, items: readonly TItem[]) => TKey;
   children: (item: TItem, index: number, items: readonly TItem[]) => Child;
@@ -516,7 +354,7 @@ export function For<TState, TItem, TKey = unknown>(
     rows = nextRows;
   };
 
-  draw(props.each(readState(props.store)), readState(props.store));
+  draw(props.each(readCell(props.store)), readCell(props.store));
 
   const unsubscribe = subscribeSelector(
     props.store,
@@ -549,11 +387,6 @@ function classSet(value: ClassBinding): Set<string> {
   );
 }
 
-function boundClassSet(value: PropsBinding["class"]): Set<string> {
-  if (value === false || value === null || value === undefined) return new Set();
-  return classSet(value);
-}
-
 function setDatasetValue(
   element: HTMLElement,
   name: string,
@@ -584,7 +417,8 @@ function applyClassBinding(
   previous: Set<string>,
   value: PropsBinding["class"],
 ): Set<string> {
-  const next = boundClassSet(value);
+  const next =
+    value === false || value === null || value === undefined ? new Set<string>() : classSet(value);
   for (const name of previous) {
     if (!next.has(name)) element.classList.remove(name);
   }
@@ -718,24 +552,24 @@ function createPropsBinding(element: Element): (value: PropsBinding) => void {
 }
 
 function bindDomValue(write: (element: Element, name: string, value: unknown) => void) {
-  function binding<TState>(name: string, store: StateSource<TState>): Action;
+  function binding<TState>(name: string, cell: AnyCell<TState, boolean, boolean>): Action;
   function binding<TState, TValue, TElement extends Element = Element>(
     name: string,
-    store: StateSource<TState>,
+    cell: AnyCell<TState, boolean, boolean>,
     selector: Selector<TState, TValue>,
     equality?: Equality<TValue>,
   ): Action<TElement>;
   function binding<TState, TValue, TElement extends Element>(
     name: string,
-    store: StateSource<TState>,
+    cell: AnyCell<TState, boolean, boolean>,
     selector?: Selector<TState, TValue>,
     equality?: Equality<TValue>,
   ): Action<TElement> {
     const select = selector ?? ((value: TState) => value as unknown as TValue);
     return (element) => {
       const sync = (value: TValue) => write(element, name, value);
-      sync(select(readState(store)));
-      return subscribeSelector(store, select, sync, equality);
+      sync(select(readCell(cell)));
+      return subscribeSelector(cell, select, sync, equality);
     };
   }
   return binding;
@@ -743,7 +577,7 @@ function bindDomValue(write: (element: Element, name: string, value: unknown) =>
 
 export const bind = {
   text<TState, TValue>(
-    store: StateSource<TState>,
+    cell: AnyCell<TState, boolean, boolean>,
     selector: Selector<TState, TValue>,
     format: (value: TValue) => string = (value) =>
       value === null || value === undefined ? "" : String(value),
@@ -753,8 +587,8 @@ export const bind = {
       const sync = (value: TValue) => {
         element.textContent = format(value);
       };
-      sync(selector(readState(store)));
-      return subscribeSelector(store, selector, sync, equality);
+      sync(selector(readCell(cell)));
+      return subscribeSelector(cell, selector, sync, equality);
     };
   },
 
@@ -762,93 +596,88 @@ export const bind = {
 
   class<TState>(
     name: string,
-    store: StateSource<TState>,
+    cell: AnyCell<TState, boolean, boolean>,
     selector: Selector<TState, boolean>,
     equality?: Equality<boolean>,
   ): Action<Element> {
     return (element) => {
       const sync = (enabled: boolean) => element.classList.toggle(name, enabled);
-      sync(selector(readState(store)));
-      return subscribeSelector(store, selector, sync, equality);
+      sync(selector(readCell(cell)));
+      return subscribeSelector(cell, selector, sync, equality);
     };
   },
 
   classes<TState>(
-    store: StateSource<TState>,
+    cell: AnyCell<TState, boolean, boolean>,
     selector: Selector<TState, ClassBinding>,
     equality?: Equality<ClassBinding>,
   ): Action<Element> {
     return (element) => {
       let previous = new Set<string>();
       const sync = (value: ClassBinding) => {
-        const next = classSet(value);
-        for (const name of previous) {
-          if (!next.has(name)) element.classList.remove(name);
-        }
-        for (const name of next) element.classList.add(name);
-        previous = next;
+        previous = applyClassBinding(element, previous, value);
       };
-      sync(selector(readState(store)));
-      return subscribeSelector(store, selector, sync, equality);
+      sync(selector(readCell(cell)));
+      return subscribeSelector(cell, selector, sync, equality);
     };
   },
 
   style<TState>(
-    store: StateSource<TState>,
+    cell: AnyCell<TState, boolean, boolean>,
     selector: Selector<TState, StyleBinding>,
     equality?: Equality<StyleBinding>,
   ): Action<HTMLElement | SVGElement> {
     return (element) => {
       const sync = createStyleBinding(element);
-      sync(selector(readState(store)));
-      return subscribeSelector(store, selector, sync, equality);
+      sync(selector(readCell(cell)));
+      return subscribeSelector(cell, selector, sync, equality);
     };
   },
 
   prop: bindDomValue(setDomProperty),
 
   props<TState, TValue extends PropsBinding, TElement extends Element = Element>(
-    store: StateSource<TState>,
+    cell: AnyCell<TState, boolean, boolean>,
     selector: Selector<TState, TValue>,
     equality?: Equality<TValue>,
   ): Action<TElement> {
     return (element) => {
       const sync = createPropsBinding(element);
-      sync(selector(readState(store)));
-      return subscribeSelector(store, selector, sync, equality);
+      sync(selector(readCell(cell)));
+      return subscribeSelector(cell, selector, sync, equality);
     };
   },
 
   dataset<TState>(
     name: string,
-    store: StateSource<TState>,
+    cell: AnyCell<TState, boolean, boolean>,
     selector: Selector<TState, string | number | boolean | null | undefined>,
     equality?: Equality<string | number | boolean | null | undefined>,
   ): Action<HTMLElement> {
     return (element) => {
       const sync = (value: string | number | boolean | null | undefined) =>
         setDatasetValue(element, name, value);
-      sync(selector(readState(store)));
-      return subscribeSelector(store, selector, sync, equality);
+      sync(selector(readCell(cell)));
+      return subscribeSelector(cell, selector, sync, equality);
     };
   },
 
   aria<TState>(
     name: string,
-    store: StateSource<TState>,
+    cell: AnyCell<TState, boolean, boolean>,
     selector: Selector<TState, string | number | boolean | null | undefined>,
     equality?: Equality<string | number | boolean | null | undefined>,
   ): Action<Element> {
     return (element) => {
       const sync = (value: string | number | boolean | null | undefined) =>
         setAriaValue(element, name, value);
-      sync(selector(readState(store)));
-      return subscribeSelector(store, selector, sync, equality);
+      sync(selector(readCell(cell)));
+      return subscribeSelector(cell, selector, sync, equality);
     };
   },
 
   value<TState, TValue>(
-    store: WritableStateSource<TState>,
+    cell: ValueCell<TState>,
     selector: Selector<TState, TValue>,
     commit: (value: string, state: TState) => Partial<TState> | TState | void,
     options: {
@@ -865,12 +694,12 @@ export const bind = {
         const next = format(value);
         if (element.value !== next) element.value = next;
       };
-      sync(selector(readState(store)));
-      const unsubscribe = subscribeSelector(store, selector, sync, options.equality);
+      sync(selector(readCell(cell)));
+      const unsubscribe = subscribeSelector(cell, selector, sync, options.equality);
       const eventName = options.event ?? "input";
       const handler = () => {
-        const patch = commit(element.value, readState(store));
-        if (patch !== undefined) writeState(store, patch);
+        const patch = commit(element.value, readCell(cell));
+        if (patch !== undefined) writeCell(cell, patch);
       };
       element.addEventListener(eventName, handler);
       return () => {
@@ -881,7 +710,7 @@ export const bind = {
   },
 
   checked<TState>(
-    store: WritableStateSource<TState>,
+    cell: ValueCell<TState>,
     selector: Selector<TState, boolean>,
     commit: (checked: boolean, state: TState) => Partial<TState> | TState | void,
     equality?: Equality<boolean>,
@@ -890,11 +719,11 @@ export const bind = {
       const sync = (checked: boolean) => {
         if (element.checked !== checked) element.checked = checked;
       };
-      sync(selector(readState(store)));
-      const unsubscribe = subscribeSelector(store, selector, sync, equality);
+      sync(selector(readCell(cell)));
+      const unsubscribe = subscribeSelector(cell, selector, sync, equality);
       const handler = () => {
-        const patch = commit(element.checked, readState(store));
-        if (patch !== undefined) writeState(store, patch);
+        const patch = commit(element.checked, readCell(cell));
+        if (patch !== undefined) writeCell(cell, patch);
       };
       element.addEventListener("change", handler);
       return () => {
@@ -905,7 +734,7 @@ export const bind = {
   },
 
   number<TState, TValue>(
-    store: WritableStateSource<TState>,
+    cell: ValueCell<TState>,
     selector: Selector<TState, TValue>,
     commit: (value: number | null, state: TState) => Partial<TState> | TState | void,
     options: {
@@ -922,14 +751,14 @@ export const bind = {
         const next = format(value);
         if (element.value !== next) element.value = next;
       };
-      sync(selector(readState(store)));
-      const unsubscribe = subscribeSelector(store, selector, sync, options.equality);
+      sync(selector(readCell(cell)));
+      const unsubscribe = subscribeSelector(cell, selector, sync, options.equality);
       const eventName = options.event ?? "input";
       const handler = () => {
         const raw = element.value.trim();
         const next = raw === "" ? null : Number(raw);
-        const patch = commit(Number.isNaN(next) ? null : next, readState(store));
-        if (patch !== undefined) writeState(store, patch);
+        const patch = commit(Number.isNaN(next) ? null : next, readCell(cell));
+        if (patch !== undefined) writeCell(cell, patch);
       };
       element.addEventListener(eventName, handler);
       return () => {
@@ -940,7 +769,7 @@ export const bind = {
   },
 
   checkedGroup<TState, TValue extends string = string>(
-    store: WritableStateSource<TState>,
+    cell: ValueCell<TState>,
     selector: Selector<TState, readonly TValue[]>,
     commit: (values: TValue[], state: TState) => Partial<TState> | TState | void,
     options: {
@@ -953,15 +782,15 @@ export const bind = {
       const sync = (values: readonly TValue[]) => {
         element.checked = values.includes(readValue());
       };
-      sync(selector(readState(store)));
-      const unsubscribe = subscribeSelector(store, selector, sync, options.equality);
+      sync(selector(readCell(cell)));
+      const unsubscribe = subscribeSelector(cell, selector, sync, options.equality);
       const handler = () => {
-        const selected = new Set(selector(readState(store)));
+        const selected = new Set(selector(readCell(cell)));
         const value = readValue();
         if (element.checked) selected.add(value);
         else selected.delete(value);
-        const patch = commit(Array.from(selected), readState(store));
-        if (patch !== undefined) writeState(store, patch);
+        const patch = commit(Array.from(selected), readCell(cell));
+        if (patch !== undefined) writeCell(cell, patch);
       };
       element.addEventListener("change", handler);
       return () => {
@@ -972,7 +801,7 @@ export const bind = {
   },
 
   radio<TState, TValue extends string | number | boolean = string>(
-    store: WritableStateSource<TState>,
+    cell: ValueCell<TState>,
     selector: Selector<TState, TValue>,
     commit: (value: TValue, state: TState) => Partial<TState> | TState | void,
     options: {
@@ -985,12 +814,12 @@ export const bind = {
       const sync = (value: TValue) => {
         element.checked = Object.is(value, readValue());
       };
-      sync(selector(readState(store)));
-      const unsubscribe = subscribeSelector(store, selector, sync, options.equality);
+      sync(selector(readCell(cell)));
+      const unsubscribe = subscribeSelector(cell, selector, sync, options.equality);
       const handler = () => {
         if (!element.checked) return;
-        const patch = commit(readValue(), readState(store));
-        if (patch !== undefined) writeState(store, patch);
+        const patch = commit(readValue(), readCell(cell));
+        if (patch !== undefined) writeCell(cell, patch);
       };
       element.addEventListener("change", handler);
       return () => {
@@ -1001,7 +830,7 @@ export const bind = {
   },
 
   selected<TState, TValue extends string = string>(
-    store: WritableStateSource<TState>,
+    cell: ValueCell<TState>,
     selector: Selector<TState, readonly TValue[]>,
     commit: (values: TValue[], state: TState) => Partial<TState> | TState | void,
     equality?: Equality<readonly TValue[]>,
@@ -1013,14 +842,14 @@ export const bind = {
           option.selected = selected.has(option.value);
         }
       };
-      sync(selector(readState(store)));
-      const unsubscribe = subscribeSelector(store, selector, sync, equality);
+      sync(selector(readCell(cell)));
+      const unsubscribe = subscribeSelector(cell, selector, sync, equality);
       const handler = () => {
         const values = Array.from(element.options)
           .filter((option) => option.selected)
           .map((option) => option.value as TValue);
-        const patch = commit(values, readState(store));
-        if (patch !== undefined) writeState(store, patch);
+        const patch = commit(values, readCell(cell));
+        if (patch !== undefined) writeCell(cell, patch);
       };
       element.addEventListener("change", handler);
       return () => {
@@ -1031,13 +860,13 @@ export const bind = {
   },
 
   files<TState>(
-    store: WritableStateSource<TState>,
+    cell: ValueCell<TState>,
     commit: (files: FileList | null, state: TState) => Partial<TState> | TState | void,
   ): Action<HTMLInputElement> {
     return (element) => {
       const handler = () => {
-        const patch = commit(element.files, readState(store));
-        if (patch !== undefined) writeState(store, patch);
+        const patch = commit(element.files, readCell(cell));
+        if (patch !== undefined) writeCell(cell, patch);
       };
       element.addEventListener("change", handler);
       return () => element.removeEventListener("change", handler);

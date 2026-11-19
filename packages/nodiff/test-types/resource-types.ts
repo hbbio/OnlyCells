@@ -1,9 +1,13 @@
+import { Sheet } from "@okcontract/cells";
 import { createResource } from "../src/resource";
 
+const sheet = new Sheet();
 const requiredArgs = createResource<string, { id: string }>({
+  sheet,
   load: async (args) => args.id,
 });
 
+void sheet.map([requiredArgs.cell], (state) => state.data?.toUpperCase());
 void requiredArgs.load({ id: "post-1" });
 void requiredArgs.refresh();
 

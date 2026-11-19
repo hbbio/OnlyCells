@@ -1,7 +1,6 @@
 import { bind, type Action, type Child } from "@nodiffjs/core";
 import { component } from "./cells";
-import { themeOptions, type PreferencesData } from "./schemas";
-import { preferences } from "./state";
+import { count, step, theme, type Theme, themeOptions } from "./preferences";
 
 export const PageHeader = component(
   "PageHeader",
@@ -59,15 +58,9 @@ export const SectionTitle = component(
   },
 );
 
-export const CounterCard = component("CounterCard", (proxy) => {
-  const count = proxy.map([preferences], (state) => state.count, "count", true);
-
+export const CounterCard = component("CounterCard", () => {
   return (
-    <article
-      class="panel counter-card"
-      aria-live="polite"
-      use={bind.dataset("step", preferences, (state) => state.step)}
-    >
+    <article class="panel counter-card" aria-live="polite">
       <div class="panel-heading">
         <div>
           <h2 class="panel-label">Counter</h2>
@@ -79,15 +72,11 @@ export const CounterCard = component("CounterCard", (proxy) => {
       <div class="button-group">
         <button
           class="button-primary"
-          onClick={() =>
-            preferences.update((state) => ({ ...state, count: state.count + state.step }))
-          }
+          onClick={() => count.update((value) => value + (step.value ?? 1))}
         >
           Increment
         </button>
-        <button onClick={() => preferences.update((state) => ({ ...state, count: 0 }))}>
-          Reset
-        </button>
+        <button onClick={() => count.set(0)}>Reset</button>
       </div>
 
       <label class="field">
@@ -97,11 +86,9 @@ export const CounterCard = component("CounterCard", (proxy) => {
           min="1"
           max="10"
           use={bind.number(
-            preferences,
-            (state) => state.step,
-            (step) => ({
-              step: Math.max(1, Math.min(10, Math.trunc(step ?? 1))),
-            }),
+            step,
+            (value) => value,
+            (value) => Math.max(1, Math.min(10, Math.trunc(value ?? 1))),
           )}
         />
       </label>
@@ -109,13 +96,8 @@ export const CounterCard = component("CounterCard", (proxy) => {
   );
 });
 
-export const ThemeCard = component("ThemeCard", (proxy) => {
+export const ThemeCard = component("ThemeCard", () => {
   const previews = ["cupcake", "synthwave", "nord", "sunset"] as const;
-  const selected = proxy.map([preferences], (state) => state.theme, "selected theme", true);
-
-  function setTheme(theme: PreferencesData["theme"]): void {
-    preferences.update((state) => ({ ...state, theme }));
-  }
 
   return (
     <article class="panel">
@@ -123,10 +105,10 @@ export const ThemeCard = component("ThemeCard", (proxy) => {
       <label class="field">
         Theme
         <select
-          use={bind.prop("value", selected)}
+          use={bind.prop("value", theme)}
           onChange={(event) => {
-            const theme = themeOptions.find((value) => value === event.currentTarget.value);
-            if (theme !== undefined) setTheme(theme);
+            const next = themeOptions.find((value) => value === event.currentTarget.value);
+            if (next !== undefined) theme.set(next);
           }}
         >
           {themeOptions.map((theme) => (
@@ -136,14 +118,14 @@ export const ThemeCard = component("ThemeCard", (proxy) => {
       </label>
 
       <div class="theme-previews" role="group" aria-label="Theme previews">
-        {previews.map((theme) => (
+        {previews.map((preview) => (
           <button
             type="button"
-            data-theme={theme}
+            data-theme={preview}
             class="theme-swatch"
-            aria-label={themeLabel(theme)}
-            use={bind.aria("pressed", selected, (current) => String(current === theme))}
-            onClick={() => setTheme(theme)}
+            aria-label={themeLabel(preview)}
+            use={bind.aria("pressed", theme, (current) => String(current === preview))}
+            onClick={() => theme.set(preview)}
           />
         ))}
       </div>
@@ -151,7 +133,7 @@ export const ThemeCard = component("ThemeCard", (proxy) => {
   );
 });
 
-function themeLabel(theme: PreferencesData["theme"]): string {
+function themeLabel(theme: Theme): string {
   if (theme === "system") return "System";
   return theme
     .split("-")

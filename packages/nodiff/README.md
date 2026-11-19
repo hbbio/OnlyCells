@@ -43,9 +43,10 @@ const unmount = mount("#app", Counter);
 ```
 
 The examples use Cells 0.4.0. Pass Cells to `bind.attr` and `bind.prop` for direct updates, or
-use selectors to read fields from a Cell or a `ReadableStore`. Use a `SheetProxy` to group cells
-created by a component and destroy it during cleanup. Auth, resources, and routing take a
-`cell` option when they need to share an application sheet.
+use selectors to read individual fields. Use a `SheetProxy` to group Cells created by a
+component and destroy the proxy during cleanup. Auth, resources, and the router expose their
+state as `cell`. Pass `sheet` to create it on a shared Sheet, or supply an existing `ValueCell`
+with the `cell` option.
 
 ## Imports
 

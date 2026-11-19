@@ -1,13 +1,9 @@
+import type { ValueCell } from "@okcontract/cells";
 import { type Action, type Child, type ElementProps, jsx } from "./dom.ts";
 import { safeErrorMessage, toError } from "./errors.ts";
 import { getSecurityPolicy } from "./security.ts";
-import {
-  createCellStore,
-  type CellStore,
-  subscribeSelector,
-  view,
-  type WritableCell,
-} from "./store.ts";
+import { type ControllerOptions, createControllerCell, readCell } from "./state.ts";
+import { subscribeSelector, view } from "./store.ts";
 
 export type RouteContext<TMeta = unknown> = {
   path: string;
@@ -34,9 +30,8 @@ export type RouterState<TMeta = unknown> = {
   match: RouteMatch<TMeta> | null;
 };
 
-export type RouterOptions<TMeta = unknown> = {
+export type RouterOptions<TMeta = unknown> = ControllerOptions<RouterState<TMeta>> & {
   mode?: "history" | "hash";
-  cell?: WritableCell<RouterState<TMeta>>;
   fallback?: (state: RouterState<TMeta>) => Child;
   error?: Child | ((error: Error, state: RouterState<TMeta>) => Child);
   onError?: (error: Error, state: RouterState<TMeta>) => void;
@@ -50,7 +45,7 @@ export type LinkProps = Omit<ElementProps<HTMLAnchorElement>, "href"> & {
 };
 
 export type Router<TMeta = unknown> = {
-  store: CellStore<RouterState<TMeta>>;
+  cell: ValueCell<RouterState<TMeta>>;
   mode: "history" | "hash";
   href(to: string): string;
   navigate(to: string, options?: { replace?: boolean }): void;
@@ -231,15 +226,14 @@ export function createRouter<TMeta = unknown>(
     return `${window.location.pathname}${window.location.search}`;
   };
 
-  const store = createCellStore(() => routeMatch(compiled, readPath()), options.cell);
-  const source = options.cell ?? store;
+  const cell = createControllerCell(routeMatch(compiled, readPath()), options, "route");
 
-  const sync = () => store.setState(routeMatch(compiled, readPath()), true);
+  const sync = () => cell.set(routeMatch(compiled, readPath()));
 
   let dispose: (() => void) | null = null;
 
   const router: Router<TMeta> = {
-    store,
+    cell,
     mode,
     href(to: string) {
       const normalized = normalizePath(to);
@@ -277,7 +271,7 @@ export function createRouter<TMeta = unknown>(
     },
     outlet() {
       return view(
-        source,
+        cell,
         (state) => state.path,
         (_path, state) => {
           const match = state.match;
@@ -312,8 +306,8 @@ export function createRouter<TMeta = unknown>(
         ? (element) => {
             const select = (state: RouterState<TMeta>) => isActivePath(state, to, exact);
             const syncActive = (enabled: boolean) => element.classList.toggle(activeClass, enabled);
-            syncActive(select(store.getState()));
-            return subscribeSelector(source, select, syncActive);
+            syncActive(select(readCell(cell)));
+            return subscribeSelector(cell, select, syncActive);
           }
         : undefined;
 

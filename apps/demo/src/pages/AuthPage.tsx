@@ -1,8 +1,8 @@
-import { type AuthToken, bind, Show, validatedSubmit } from "@nodiffjs/core";
+import { type AuthToken, bind, cookieSessionRequest, Show, validatedSubmit } from "@nodiffjs/core";
 import { component } from "../cells";
 import { PageHeader, SectionTitle, StatusMetric } from "../components";
-import { LoginSchema } from "../schemas";
-import { auth, demoCookieSessionRequest, fakeLogin, readDemoCsrfToken, session } from "../state";
+import { LoginSchema, type LoginValues } from "../schemas";
+import { authHeaders, readDemoCsrfToken, session } from "../state";
 
 const AuthOverview = component("AuthOverview", (proxy) => {
   const status = proxy.map([session], (state) => state.status, "session status", true);
@@ -35,6 +35,18 @@ const AuthOverview = component("AuthOverview", (proxy) => {
     </section>
   );
 });
+
+function fakeLogin({ email }: LoginValues): void {
+  const issuedAt = Date.now();
+  const name = email.split("@")[0] || "demo-user";
+  session.value?.setToken(
+    {
+      accessToken: btoa(`${email}:${issuedAt}`),
+      expiresAt: issuedAt + 60 * 60 * 1000,
+    },
+    { email, name },
+  );
+}
 
 const LoginPanel = component("LoginPanel", () => {
   return (
@@ -78,14 +90,14 @@ const AuthenticatedPanel = component(
             <p class="metric-hint">Token preview: {tokenPreview}</p>
             <p class="metric-hint">Expires: {expiresAt}</p>
           </div>
-          <button onClick={() => auth.logout()}>Logout</button>
+          <button onClick={() => session.value?.clear()}>Logout</button>
         </div>
         <pre class="code-block">
           <code>
             {JSON.stringify(
               {
-                headers: auth.authHeaders(),
-                cookieSession: demoCookieSessionRequest,
+                headers: authHeaders(),
+                cookieSession: cookieSessionRequest(),
               },
               null,
               2,

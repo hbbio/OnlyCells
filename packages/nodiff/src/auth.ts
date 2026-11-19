@@ -1,7 +1,7 @@
-import { isObject } from "@okcontract/cells";
+import { isObject, Sheet, type ValueCell } from "@okcontract/cells";
 import { createLocalCache } from "./cache.ts";
 import { defineSchema, type Schema, ValidationError } from "./schema.ts";
-import { createCellStore, type WritableCell } from "./store.ts";
+import { type ControllerOptions, patchCell, readCell } from "./state.ts";
 
 export type AuthToken = {
   accessToken: string;
@@ -41,9 +41,25 @@ export type AuthOptions<TToken extends AuthToken> = {
   allowRefreshTokenPersistence?: boolean;
 };
 
+export type AuthController<TUser = unknown, TToken extends AuthToken = AuthToken> = {
+  cell: ValueCell<AuthState<TUser, TToken>>;
+  getToken(): string | null;
+  requireToken(): TToken;
+  authHeaders(): HeadersInit;
+  requiredHeaders(): HeadersInit;
+  isExpired(skewMs?: number): boolean;
+  isAuthenticated(): boolean;
+  setToken(token: TToken, user?: TUser | null): void;
+  setUser(user: TUser | null): void;
+  logout(): void;
+};
+
+type AuthControllerOptions<TUser, TToken extends AuthToken> = AuthOptions<TToken> &
+  ControllerOptions<AuthState<TUser, TToken>>;
+
 export function createAuth<TUser = unknown, TToken extends AuthToken = AuthToken>(
-  options: AuthOptions<TToken> & { cell?: WritableCell<AuthState<TUser, TToken>> } = {},
-) {
+  options: AuthControllerOptions<TUser, TToken> = {},
+): AuthController<TUser, TToken> {
   const storageKey = options.storageKey ?? "nodiff:auth";
   const schema = options.tokenSchema ?? (AuthTokenSchema as Schema<TToken>);
   const cache = createLocalCache("");
@@ -70,49 +86,65 @@ export function createAuth<TUser = unknown, TToken extends AuthToken = AuthToken
 
   const savedToken = persist ? readSavedToken() : null;
 
-  const store = createCellStore<AuthState<TUser, TToken>>(
-    (set) => ({
-      token: savedToken,
-      user: null,
-      status: savedToken ? "authenticated" : "anonymous",
-      setToken: (token, user) => {
-        if (persist && token.refreshToken && !options.allowRefreshTokenPersistence) {
-          throw new Error("Refusing to persist a refresh token without explicit opt-in.");
-        }
-        if (tokenExpired(token)) {
-          set({ token: null, user: null, status: "anonymous" });
-          return;
-        }
-        set((state) => ({
-          token,
-          user: user === undefined ? state.user : user,
-          status: "authenticated",
-        }));
-      },
-      setUser: (user) => set({ user }),
-      clear: () => set({ token: null, user: null, status: "anonymous" }),
-    }),
-    options.cell,
-  );
+  const initial: AuthState<TUser, TToken> = {
+    token: savedToken,
+    user: null,
+    status: savedToken ? "authenticated" : "anonymous",
+    setToken,
+    setUser: (user) => patchCell(cell, { user }),
+    clear,
+  };
+  const suppliedCell = options.cell;
+  const cell =
+    suppliedCell ?? (options.sheet ?? new Sheet(Object.is)).new(initial, undefined, "session");
+  // Subscribers to the supplied Cell can call session actions as soon as it updates.
+  if (suppliedCell) cell.set(initial);
+
+  function clear(): void {
+    patchCell(cell, { token: null, user: null, status: "anonymous" });
+  }
+
+  function setToken(token: TToken, user?: TUser | null): void {
+    if (persist && token.refreshToken && !options.allowRefreshTokenPersistence) {
+      throw new Error("Refusing to persist a refresh token without explicit opt-in.");
+    }
+    if (tokenExpired(token)) {
+      clear();
+      return;
+    }
+    const state = readCell(cell);
+    cell.set({
+      ...state,
+      token,
+      user: user === undefined ? state.user : user,
+      status: "authenticated",
+    });
+  }
 
   if (persist) {
-    store.subscribe((state, previous) => {
-      if (state.token === previous.token) return;
-      if (!state.token || tokenExpired(state.token)) {
+    let previousToken = savedToken;
+    cell.subscribe(({ token }) => {
+      if (token === previousToken) return;
+      previousToken = token;
+      if (
+        !token ||
+        (token.refreshToken && !options.allowRefreshTokenPersistence) ||
+        tokenExpired(token)
+      ) {
         cache.remove(storageKey);
         return;
       }
-      const ttl = state.token.expiresAt ? state.token.expiresAt - Date.now() : undefined;
+      const ttl = token.expiresAt ? token.expiresAt - Date.now() : undefined;
       if (ttl !== undefined && ttl <= 0) {
         cache.remove(storageKey);
         return;
       }
-      cache.set(storageKey, state.token, ttl === undefined ? {} : { ttl });
+      cache.set(storageKey, token, ttl === undefined ? {} : { ttl });
     });
   }
 
   function activeToken(): TToken | null {
-    const token = store.getState().token;
+    const token = readCell(cell).token;
     if (!token?.accessToken || tokenExpired(token)) return null;
     return token;
   }
@@ -143,32 +175,28 @@ export function createAuth<TUser = unknown, TToken extends AuthToken = AuthToken
   }
 
   function isExpired(skewMs = 30_000): boolean {
-    const token = store.getState().token;
+    const token = readCell(cell).token;
     if (!token) return false;
     return tokenExpired(token, skewMs);
   }
 
   function isAuthenticated(): boolean {
-    return Boolean(store.getState().token?.accessToken) && !isExpired();
+    return Boolean(readCell(cell).token?.accessToken) && !isExpired();
   }
 
   return {
-    store,
+    cell,
     getToken,
     requireToken,
     authHeaders,
     requiredHeaders,
     isExpired,
     isAuthenticated,
-    setToken: (token: TToken, user?: TUser | null) => store.getState().setToken(token, user),
-    setUser: (user: TUser | null) => store.getState().setUser(user),
-    logout: () => store.getState().clear(),
+    setToken: (token, user) => readCell(cell).setToken(token, user),
+    setUser: (user) => readCell(cell).setUser(user),
+    logout: () => readCell(cell).clear(),
   };
 }
-
-export type AuthController<TUser = unknown, TToken extends AuthToken = AuthToken> = ReturnType<
-  typeof createAuth<TUser, TToken>
->;
 
 export function cookieSessionRequest() {
   return {

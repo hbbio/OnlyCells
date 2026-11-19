@@ -1,10 +1,11 @@
+import type { AnyCell } from "@okcontract/cells";
 import { addCleanup, cleanupNode, replaceChildrenClean, withRenderCleanup } from "./lifecycle.ts";
 import { safeErrorMessage, toError } from "./errors.ts";
 import { getSecurityPolicy } from "./security.ts";
-import type { ReadableCell } from "./store.ts";
 
 export type PrimitiveChild = string | number | bigint | boolean | null | undefined;
-type CellChild = ReadableCell<PrimitiveChild | Error>;
+// Project the readable members so Cells of narrower primitive types work as children.
+type CellChild = Pick<AnyCell<PrimitiveChild, boolean, boolean>, "value" | "subscribe">;
 export type Child = PrimitiveChild | Node | CellChild | Child[] | Iterable<Child>;
 export type Component<P extends object = Record<string, unknown>> = (
   props: P & { children?: Child },

@@ -1,24 +1,13 @@
 import {
-  type AuthState,
   configureSecurityPolicy,
-  cookieSessionRequest,
   createApi,
   createAuth,
   createLocalCache,
   createResource,
-  readCsrfToken,
-  type ResourceState,
-  safeErrorMessage,
   type SecurityViolation,
 } from "@nodiffjs/core";
-import { controllerCell, sheet } from "./cells";
-import {
-  type LoginValues,
-  type Post,
-  PostsSchema,
-  type PreferencesData,
-  PreferencesSchema,
-} from "./schemas";
+import { sheet } from "./cells";
+import { PostsSchema } from "./schemas";
 
 const demoCsrfToken = crypto.randomUUID();
 
@@ -26,7 +15,7 @@ function reportSecurityViolation(violation: SecurityViolation): void {
   console.warn(`[nodiff security] ${violation.type}: ${violation.context ?? violation.message}`);
 }
 
-export const securityPolicy = configureSecurityPolicy({
+const securityPolicy = configureSecurityPolicy({
   mode: "strict",
   allowedOrigins: ["self", "https://jsonplaceholder.typicode.com"],
   allowedUrlSchemes: ["http:", "https:"],
@@ -39,62 +28,20 @@ export const securityPolicy = configureSecurityPolicy({
   onViolation: reportSecurityViolation,
 });
 
-export const appCache = createLocalCache("demo:");
-export const apiCache = createLocalCache("demo:http:");
-
-const defaultPreferences: PreferencesData = {
-  count: 0,
-  search: "",
-  postPage: 1,
-  theme: "system",
-  step: 1,
-};
-
-function readStoredPreferences(raw: string): PreferencesData {
-  try {
-    const stored: unknown = JSON.parse(raw);
-    // Older demo builds wrapped preferences in a cache envelope.
-    const value = stored && typeof stored === "object" && "value" in stored ? stored.value : stored;
-    return PreferencesSchema.parse(value);
-  } catch {
-    return defaultPreferences;
-  }
-}
-
-function createPreferences() {
-  const storageKey = appCache.fullKey("preferences");
-  let initial = defaultPreferences;
-  try {
-    const saved = localStorage.getItem(storageKey);
-    if (saved !== null) {
-      initial = readStoredPreferences(saved);
-      const normalized = JSON.stringify(initial);
-      if (saved !== normalized) localStorage.setItem(storageKey, normalized);
-    }
-  } catch {
-    return sheet.new(initial, undefined, "preferences");
-  }
-  return sheet.new(initial, undefined, "preferences", { _storageKey: storageKey });
-}
-
-export const preferences = createPreferences();
-
-preferences.subscribe(({ theme }) => {
-  if (theme === "system") document.documentElement.removeAttribute("data-theme");
-  else document.documentElement.dataset.theme = theme;
-});
-
 type DemoUser = { email: string; name: string };
-export const session = controllerCell<AuthState<DemoUser>>("session");
-export const auth = createAuth<DemoUser>({ cell: session });
+const auth = createAuth<DemoUser>({ sheet });
+export const session = auth.cell;
+export const authHeaders = auth.authHeaders;
 
-export function readDemoCsrfToken(): string | null {
-  return readCsrfToken({ token: demoCsrfToken });
+export function readDemoCsrfToken(): string {
+  return demoCsrfToken;
 }
 
-export const publicApi = createApi({
+export const httpCachePrefix = "demo:http:";
+
+const publicApi = createApi({
   baseUrl: "https://jsonplaceholder.typicode.com",
-  cache: apiCache,
+  cache: createLocalCache(httpCachePrefix),
   security: securityPolicy,
 });
 
@@ -109,11 +56,9 @@ export const sessionApi = createApi({
   onUnauthorized: () => auth.logout(),
 });
 
-export const demoCookieSessionRequest = cookieSessionRequest();
-
-export const postsState = controllerCell<ResourceState<Post[]>>("posts");
-export const posts = createResource<Post[]>({
-  cell: postsState,
+const postsCacheKey = "posts";
+const postsResource = createResource({
+  sheet,
   immediate: true,
   load: (_args, { signal }) =>
     publicApi.get("/posts", {
@@ -121,7 +66,7 @@ export const posts = createResource<Post[]>({
       signal,
       schema: PostsSchema,
       cache: {
-        key: "posts",
+        key: postsCacheKey,
         ttl: 5 * 60 * 1000,
         swr: true,
         tags: ["posts"],
@@ -129,61 +74,10 @@ export const posts = createResource<Post[]>({
     }),
 });
 
-export type PostsVm = {
-  status: string;
-  loading: boolean;
-  stale: boolean;
-  updatedAt: number | null;
-  error: string | null;
-  total: number;
-  filtered: number;
-  search: string;
-  page: number;
-  pageSize: number;
-  pageCount: number;
-  pageStart: number;
-  pageEnd: number;
-  visible: Post[];
-};
+export const posts = postsResource.cell;
+export const refreshPosts = postsResource.refresh;
 
-export function readPostsVm(resource: ResourceState<Post[]>, prefs: PreferencesData): PostsVm {
-  const search = prefs.search.trim().toLowerCase();
-  const all = resource.data ?? [];
-  const filtered = search
-    ? all.filter((post) => `${post.title} ${post.body}`.toLowerCase().includes(search))
-    : all;
-  const pageSize = 6;
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const page = Math.min(prefs.postPage, pageCount);
-  const pageStart = filtered.length === 0 ? 0 : (page - 1) * pageSize + 1;
-  const pageEnd = Math.min(page * pageSize, filtered.length);
-  const visible = filtered.slice(pageStart === 0 ? 0 : pageStart - 1, pageEnd);
-
-  return {
-    status: resource.status,
-    loading: resource.loading,
-    stale: resource.stale,
-    updatedAt: resource.updatedAt,
-    error: resource.error ? safeErrorMessage(resource.error) : null,
-    total: all.length,
-    filtered: filtered.length,
-    search,
-    page,
-    pageSize,
-    pageCount,
-    pageStart,
-    pageEnd,
-    visible,
-  };
-}
-
-export async function fakeLogin(values: LoginValues): Promise<void> {
-  const name = values.email.split("@")[0] || "demo-user";
-  auth.setToken(
-    {
-      accessToken: btoa(`${values.email}:${Date.now()}`),
-      expiresAt: Date.now() + 60 * 60 * 1000,
-    },
-    { email: values.email, name },
-  );
+export function bustPostsCache() {
+  publicApi.cache.remove(postsCacheKey);
+  return refreshPosts();
 }

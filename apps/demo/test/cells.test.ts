@@ -33,6 +33,22 @@ test("releases nested cells and shared-cell bindings when a component render fai
   }
 });
 
+test("initializes default preferences when storage is empty", async () => {
+  const cleanup = installDom();
+  let cells: typeof import("../src/preferences") | undefined;
+  try {
+    cells = await import("../src/preferences");
+
+    expect(cells.count.value).toBe(0);
+    expect(cells.step.value).toBe(1);
+    expect(cells.theme.value).toBe("system");
+    expect(cells.postFilters.value).toEqual({ search: "", postPage: 1 });
+  } finally {
+    if (cells) sheet.delete(cells.count, cells.step, cells.theme, cells.postFilters);
+    cleanup();
+  }
+});
+
 test("uses shared app cells and frees component cells on route changes and unmount", async () => {
   const cleanup = installDom();
   const originalFetch = globalThis.fetch;
@@ -43,15 +59,11 @@ test("uses shared app cells and frees component cells on route changes and unmou
   try {
     window.location.href = "http://127.0.0.1:4173/";
     document.body.innerHTML = '<div id="app"></div>';
-    window.localStorage.setItem(
-      "demo:preferences",
-      JSON.stringify({
-        value: { count: 2, search: "", theme: "night" },
-        updatedAt: 1,
-        expiresAt: null,
-        tags: [],
-      }),
-    );
+    const savedFilters = { search: "sample", postPage: 2 };
+    localStorage.setItem("demo:count", "2");
+    localStorage.setItem("demo:step", "3");
+    localStorage.setItem("demo:theme", JSON.stringify("night"));
+    localStorage.setItem("demo:post-filters", JSON.stringify(savedFilters));
 
     const { outputs } = await Bun.build({
       entrypoints: [fileURLToPath(new URL("../src/app.tsx", import.meta.url))],
@@ -64,7 +76,8 @@ test("uses shared app cells and frees component cells on route changes and unmou
               loader: "tsx",
               contents: `${await Bun.file(path).text()}
 export { mount } from "@nodiffjs/core";
-export { postsState, preferences, session } from "./state";`,
+export { posts, session } from "./state";
+export { count, step, theme, postFilters } from "./preferences";`,
             }));
           },
         },
@@ -74,33 +87,43 @@ export { postsState, preferences, session } from "./state";`,
     const {
       App,
       router,
-      routeState,
       mount: mountDemo,
-      postsState,
-      preferences,
+      posts,
       session,
+      count,
+      step,
+      theme,
+      postFilters,
     }: typeof import("../src/app") & { mount: typeof mount } & Pick<
         typeof import("../src/state"),
-        "postsState" | "preferences" | "session"
+        "posts" | "session"
+      > &
+      Pick<
+        typeof import("../src/preferences"),
+        "count" | "step" | "theme" | "postFilters"
       > = await import(`data:text/javascript;base64,${bundle}`);
-    const appSheet = routeState.sheet;
-    for (const cell of [postsState, preferences, session]) expect(cell.sheet).toBe(appSheet);
+    const appSheet = router.cell.sheet;
+    for (const cell of [posts, session, count, step, theme, postFilters]) {
+      expect(cell.sheet).toBe(appSheet);
+    }
     const appCells = appSheet.stats.size;
     unmount = mountDemo("#app", App);
     const homeCells = appSheet.stats.size;
     expect(homeCells).toBeGreaterThan(appCells);
     expect(document.documentElement.dataset.theme).toBe("night");
     expect(document.querySelector(".counter-value")?.textContent).toBe("2");
-    expect(JSON.parse(window.localStorage.getItem("demo:preferences")!)).toEqual({
-      count: 2,
-      search: "",
-      postPage: 1,
-      theme: "night",
-      step: 1,
-    });
+    const initialFilters = postFilters.value;
+    expect(initialFilters).toEqual(savedFilters);
+    const stepInput = document.querySelector<HTMLInputElement>(
+      '.counter-card input[type="number"]',
+    )!;
+    expect(stepInput.value).toBe("3");
+    stepInput.value = "2";
+    stepInput.dispatchEvent(new InputEvent("input"));
+    expect(localStorage.getItem("demo:step")).toBe("2");
     document.querySelector<HTMLButtonElement>(".counter-card .button-primary")?.click();
-    expect(document.querySelector(".counter-value")?.textContent).toBe("3");
-    expect(JSON.parse(window.localStorage.getItem("demo:preferences")!).count).toBe(3);
+    expect(document.querySelector(".counter-value")?.textContent).toBe("4");
+    expect(localStorage.getItem("demo:count")).toBe("4");
 
     const swatch = document.querySelector<HTMLButtonElement>(
       'button.theme-swatch[data-theme="nord"]',
@@ -115,18 +138,21 @@ export { postsState, preferences, session } from "./state";`,
     expect(document.documentElement.dataset.theme).toBe("nord");
     expect(themeSelect.value).toBe("nord");
     expect(swatch.getAttribute("aria-pressed")).toBe("true");
-    expect(JSON.parse(window.localStorage.getItem("demo:preferences")!).theme).toBe("nord");
+    expect(localStorage.getItem("demo:theme")).toBe(JSON.stringify("nord"));
+    expect(postFilters.value).toBe(initialFilters);
     expect(selectChanges).toBe(0);
 
     for (let attempt = 0; attempt < 3; attempt++) {
       router.navigate("/posts");
-      expect(routeState.value?.path).toBe("/posts");
+      expect(router.cell.value?.path).toBe("/posts");
       for (let i = 0; i < 20 && !document.querySelector(".post-list h3"); i++) await Bun.sleep(5);
       expect(document.querySelector(".post-list h3")?.textContent).toBe("Sample post");
       const search = document.querySelector<HTMLInputElement>('input[type="search"]')!;
+      postFilters.set({ search: "", postPage: 2 });
       search.value = "no matching post";
       search.dispatchEvent(new InputEvent("input"));
-      expect(preferences.value?.search).toBe("no matching post");
+      expect(postFilters.value).toEqual({ search: "no matching post", postPage: 1 });
+      expect(localStorage.getItem("demo:post-filters")).toBe(JSON.stringify(postFilters.value));
       expect(document.querySelector(".post-list .notice")?.textContent).toBe(
         "No posts match this filter.",
       );
@@ -145,7 +171,7 @@ export { postsState, preferences, session } from "./state";`,
       expect(session.value?.status).toBe("authenticated");
       expect(document.querySelector(".code-block")?.textContent).toContain("Authorization");
       router.navigate("/cache");
-      expect(document.querySelector(".cache-keys")?.textContent).toContain("demo:preferences");
+      expect(document.querySelector(".cache-keys")?.textContent).toContain("demo:theme");
       if (attempt === 0) {
         const inventory = document.querySelector(".cache-keys");
         const counts = () =>
@@ -174,13 +200,23 @@ export { postsState, preferences, session } from "./state";`,
       router.navigate("/");
       await Promise.resolve();
       expect(appSheet.stats.size).toBe(homeCells);
-      expect(document.querySelector(".counter-value")?.textContent).toBe("3");
+      expect(document.querySelector(".counter-value")?.textContent).toBe("4");
     }
+
+    window.localStorage.setItem("demo:extra", "clear");
+    window.localStorage.setItem("other:fixture", "keep");
+    router.navigate("/cache");
+    document.querySelector<HTMLButtonElement>(".app-main .page-header .button-primary")!.click();
+    const remaining = Object.keys(window.localStorage).filter((key) => key.startsWith("demo:"));
+    expect(remaining).toEqual([]);
+    expect(window.localStorage.getItem("other:fixture")).toBe("keep");
+    expect(session.value?.status).toBe("anonymous");
 
     unmount();
     unmount = undefined;
     await Promise.resolve();
     expect(appSheet.stats.size).toBe(appCells);
+    expect(theme.subscribersCount).toBe(0);
   } finally {
     unmount?.();
     globalThis.fetch = originalFetch;

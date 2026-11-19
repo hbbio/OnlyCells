@@ -1,18 +1,16 @@
-import { createCellStore, bind, derivedStore, type PropsBinding } from "../src/store";
+import { Sheet } from "@okcontract/cells";
+import type { Child } from "../src/dom";
+import { bind, type PropsBinding } from "../src/store";
 
-const count = createCellStore(() => ({ value: 1 }));
-const label = createCellStore(() => ({ value: "posts" }));
+const sheet = new Sheet();
+const count = sheet.new(1);
+const label = sheet.new("posts");
 
-const vm = derivedStore([count, label], (countState, labelState) => ({
-  label: labelState.value,
-  doubled: countState.value * 2,
-}));
+const vm = sheet.map([count, label], (value, label) => ({ label, doubled: value * 2 }));
 
-vm.getState().doubled.toFixed();
-vm.getState().label.toUpperCase();
-
-// @ts-expect-error derived state preserves the selected property types.
-vm.getState().doubled.toUpperCase();
+const countText: Child = count.map((value) => String(value));
+void countText;
+bind.prop("value", count);
 
 bind.props(vm, (state) => ({
   disabled: state.doubled > 1,
@@ -20,6 +18,15 @@ bind.props(vm, (state) => ({
   class: { active: state.doubled > 1 },
   title: state.label,
 }));
+
+// @ts-expect-error derived state preserves the selected property types.
+bind.props(vm, (state) => ({ title: state.doubled.toUpperCase() }));
+
+const readCount = (value: number) => value;
+const parseCount = (value: number | null) => value ?? 0;
+bind.number(count, readCount, parseCount);
+// @ts-expect-error a two-way binding needs a ValueCell.
+bind.number(count.map(readCount), readCount, parseCount);
 
 const props = {
   disabled: true,

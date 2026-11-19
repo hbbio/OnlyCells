@@ -8,11 +8,11 @@ import {
   StatusMetric,
   ThemeCard,
 } from "../components";
-import { postsState, session } from "../state";
+import { posts, session } from "../state";
 
 export const HomePage = component("HomePage", (proxy) => {
   const authStatus = proxy.map([session], ({ status }) => status, "auth status", true);
-  const postCount = proxy.map([postsState], ({ data }) => data?.length ?? 0, "post count", true);
+  const postCount = proxy.map([posts], ({ data }) => data?.length ?? 0, "post count", true);
 
   return (
     <section class="page">
@@ -46,19 +46,19 @@ export const HomePage = component("HomePage", (proxy) => {
             label="Posts"
             value={postCount}
             badge={proxy.map(
-              [postsState],
+              [posts],
               ({ loading, status }) => (loading ? "loading" : status),
               "posts badge",
               true,
             )}
             hint={proxy.map(
-              [postsState],
+              [posts],
               ({ stale }) =>
                 stale ? "Stale cache visible while refreshing" : "Validated API data",
               "posts hint",
               true,
             )}
-            use={bind.props(postsState, ({ data, loading }) => ({
+            use={bind.props(posts, ({ data, loading }) => ({
               title: `${data?.length ?? 0} parsed posts in memory`,
               class: { "tone-warning": loading },
             }))}

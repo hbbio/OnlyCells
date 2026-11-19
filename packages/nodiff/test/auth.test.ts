@@ -26,6 +26,23 @@ describe("createAuth", () => {
     expect(createAuth({ storageKey }).getToken()).toBeNull();
   });
 
+  test("allows existing Cell subscribers to use session actions during initialization", () => {
+    const previous = createAuth<{ name: string }>();
+    const { cell } = previous;
+    previous.setUser({ name: "Previous user" });
+    const unsubscribe = cell.subscribe((state) => {
+      if (state.user === null) state.setUser({ name: "Ada" });
+    });
+
+    try {
+      const auth = createAuth({ cell });
+      expect(auth.cell).toBe(cell);
+      expect(cell.value?.user).toEqual({ name: "Ada" });
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("persists and restores tokens only when persistence is enabled", () => {
     const storageKey = "auth-test:persist";
     const auth = createAuth({ storageKey, persist: true });
@@ -61,6 +78,13 @@ describe("createAuth", () => {
         refreshToken: "refresh",
       }),
     ).toThrow("refresh token");
+    expect(window.localStorage.getItem(storageKey)).toBeNull();
+
+    auth.cell.update((state) => ({
+      ...state,
+      token: { accessToken: "access", refreshToken: "refresh" },
+      status: "authenticated",
+    }));
     expect(window.localStorage.getItem(storageKey)).toBeNull();
 
     const allowed = createAuth({
@@ -106,7 +130,7 @@ describe("createAuth", () => {
 
     const auth = createAuth({ storageKey, persist: true });
 
-    expect(auth.store.getState().status).toBe("anonymous");
+    expect(auth.cell.value?.status).toBe("anonymous");
     expect(auth.getToken()).toBeNull();
     expect(window.localStorage.getItem(storageKey)).toBeNull();
   });
@@ -147,7 +171,7 @@ describe("createAuth", () => {
       expiresAt: Date.now() - 1_000,
     });
 
-    expect(auth.store.getState().status).toBe("anonymous");
+    expect(auth.cell.value?.status).toBe("anonymous");
     expect(auth.getToken()).toBeNull();
     expect(new Headers(auth.authHeaders()).get("authorization")).toBeNull();
     expect(auth.isAuthenticated()).toBe(false);
@@ -158,7 +182,7 @@ describe("createAuth", () => {
 
     expect(auth.isExpired()).toBe(false);
     auth.setUser({ name: "Ada" });
-    expect(auth.store.getState().user).toEqual({ name: "Ada" });
+    expect(auth.cell.value?.user).toEqual({ name: "Ada" });
 
     auth.setToken({
       accessToken: "custom",

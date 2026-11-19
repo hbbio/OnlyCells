@@ -63,7 +63,7 @@ One `Sheet` holds preferences, session, route, and resource state. The demo’s 
 gives each component a `SheetProxy` for local and derived Cells. It ties the proxy’s lifetime to
 the rendered nodes and releases subscriptions if rendering throws. [Component helper](apps/demo/src/cells.ts) · [Demo entry point](apps/demo/src/main.tsx)
 
-## Store bindings
+## Cell bindings
 
 The lockfile uses Cells 0.4.0. `cell.map(fn)` derives a value from that Cell. With
 `proxy.map([cells], fn)`, each dependency is a Cell and the proxy owns the result. Capture fixed
@@ -83,8 +83,8 @@ call site.
 
 Use `bind.prop("value", selectedTheme)` to keep a select in sync with a Cell. `bind.attr(name, cell)`
 works the same way for attributes. Both also accept a selector, and `bind.props` updates several
-properties, classes, or attributes together. The binding helpers accept initialized Cells and
-`ReadableStore` sources. [Binding signatures](packages/nodiff/src/store.ts)
+properties, classes, or attributes together. Bindings read from initialized Cells. Two-way
+bindings write to a `ValueCell`. [Binding signatures](packages/nodiff/src/store.ts)
 
 ### Form controls and actions
 
@@ -137,18 +137,14 @@ same. A new item for the same key replaces the row and cleans up its bindings. [
 
 ### Saved preferences
 
-Cells 0.4.0 can store a value as JSON in localStorage. Give the Cell an `_storageKey` and update it
-with `set()` or `update()`.
+Give a Cell an `_storageKey` to save and restore its value as JSON in localStorage.
 
 ```ts
-const preferences = sheet.new({ theme: "system" }, undefined, "preferences", {
-  _storageKey: "app:preferences",
-});
+const theme = sheet.new("system", undefined, "theme", { _storageKey: "app:theme" });
 ```
 
-The demo checks saved preferences with its schema before creating the Cell. Older demo versions
-stored preferences inside a cache envelope, so startup converts those entries to the JSON value
-Cells expects. [Preferences setup](apps/demo/src/state.ts)
+The demo gives count, step, and theme their own stored Cells. Search and page share a Cell so a
+new search can reset the page in one update. [Demo preferences](apps/demo/src/preferences.ts)
 
 ## API and cache
 
@@ -199,7 +195,7 @@ const feed = createResource({
 
 const feedRegion = (
   <ResourceView
-    resource={feed}
+    resource={feed.cell}
     pending={<p>Loading posts…</p>}
     error={<p role="alert">Could not load posts.</p>}
   >
@@ -236,8 +232,9 @@ managed auth headers on its configured origin. Token persistence is opt-in with 
 and an optional `storageKey`. Saving refresh tokens takes the separate
 `allowRefreshTokenPersistence` option.
 
-Auth, resources, and routing each accept a `cell` option for a shared sheet. Their `store`
-interfaces also expose snapshots and subscriptions. [Auth controller](packages/nodiff/src/auth.ts) · [Demo state](apps/demo/src/state.ts)
+Pass `{ sheet }` to auth, resources, or the router to create their state on your shared Sheet.
+Use the returned `cell` in bindings or maps, such as `proxy.map([auth.cell], ({ user }) => user)`.
+The `cell` option lets you supply an existing `ValueCell`. [Auth controller](packages/nodiff/src/auth.ts) · [Demo state](apps/demo/src/state.ts)
 
 ## Router
 
@@ -312,9 +309,10 @@ Set `resetOnSuccess` to clear the form after the handler finishes. The action al
 - `catchRender({ render: App })` catches errors while the callback runs. It and the router show
   redacted errors by default, with hooks for reporting and a custom fallback.
 
-The demo opts into strict mode and uses separate clients for public JSONPlaceholder reads and
-first-party requests. The build copies a `_headers` file for static hosts that support it. Use
-`securityHeaders({ policy })` to generate a header map for a server you control. [Demo policy](apps/demo/src/state.ts) · [Deployment headers](apps/demo/public/_headers)
+The demo opts into strict mode. It configures a public client for JSONPlaceholder reads and a
+separate first-party client as an auth example. The build copies a `_headers` file for static
+hosts that support it. Use `securityHeaders({ policy })` to generate a header map for a server
+you control. [Demo policy](apps/demo/src/state.ts) · [Deployment headers](apps/demo/public/_headers)
 
 ## Build and preview
 

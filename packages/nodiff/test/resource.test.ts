@@ -47,11 +47,11 @@ describe("createResource", () => {
 
     expect(calls).toHaveLength(2);
     expect(calls[0]?.signal.aborted).toBe(true);
-    expect(resource.store.getState().loading).toBe(true);
+    expect(resource.cell.value?.loading).toBe(true);
 
     second.resolve("fresh");
     await expect(secondLoad).resolves.toBe("fresh");
-    expect(resource.store.getState()).toMatchObject({
+    expect(resource.cell.value).toMatchObject({
       data: "fresh",
       loading: false,
       stale: false,
@@ -60,7 +60,7 @@ describe("createResource", () => {
 
     first.resolve("stale");
     await expect(firstLoad).resolves.toBeUndefined();
-    expect(resource.store.getState().data).toBe("fresh");
+    expect(resource.cell.value?.data).toBe("fresh");
   });
 
   test("abort clears loading state and ignores late success", async () => {
@@ -70,14 +70,14 @@ describe("createResource", () => {
     });
 
     const loading = resource.load();
-    expect(resource.store.getState()).toMatchObject({
+    expect(resource.cell.value).toMatchObject({
       data: null,
       loading: true,
       status: "loading",
     });
 
     resource.abort();
-    expect(resource.store.getState()).toMatchObject({
+    expect(resource.cell.value).toMatchObject({
       data: null,
       loading: false,
       stale: false,
@@ -86,7 +86,7 @@ describe("createResource", () => {
 
     pending.resolve("late");
     await expect(loading).resolves.toBeUndefined();
-    expect(resource.store.getState().data).toBeNull();
+    expect(resource.cell.value?.data).toBeNull();
   });
 
   test("abort-aware loaders settle without leaving loading state behind", async () => {
@@ -104,7 +104,7 @@ describe("createResource", () => {
     resource.abort();
 
     await expect(loading).resolves.toBeUndefined();
-    expect(resource.store.getState()).toMatchObject({
+    expect(resource.cell.value).toMatchObject({
       data: null,
       loading: false,
       stale: false,
@@ -121,7 +121,7 @@ describe("createResource", () => {
 
     await expect(resource.load()).resolves.toBeUndefined();
 
-    expect(resource.store.getState()).toMatchObject({
+    expect(resource.cell.value).toMatchObject({
       data: null,
       loading: false,
       stale: false,
@@ -140,26 +140,26 @@ describe("createResource", () => {
     });
 
     await expect(resource.load("first")).resolves.toBeUndefined();
-    expect(resource.store.getState()).toMatchObject({
+    expect(resource.cell.value).toMatchObject({
       data: "cached",
       loading: false,
       stale: true,
       status: "error",
     });
-    expect(resource.store.getState().error?.message).toBe("denied");
+    expect(resource.cell.value?.error?.message).toBe("denied");
 
     await expect(resource.refresh()).resolves.toBeUndefined();
     expect(calls).toEqual(["first", "first"]);
 
     resource.mutate((current) => `${current}:local`);
-    expect(resource.store.getState()).toMatchObject({
+    expect(resource.cell.value).toMatchObject({
       data: "cached:local",
       status: "success",
       stale: false,
     });
 
     resource.reset();
-    expect(resource.store.getState()).toMatchObject({
+    expect(resource.cell.value).toMatchObject({
       data: "cached",
       error: null,
       loading: false,
@@ -180,7 +180,7 @@ describe("createResource", () => {
     await expect(resource.refresh()).resolves.toBeUndefined();
 
     expect(calls).toEqual([]);
-    expect(resource.store.getState()).toMatchObject({
+    expect(resource.cell.value).toMatchObject({
       data: null,
       loading: false,
       stale: false,
@@ -201,7 +201,7 @@ describe("createResource", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(calls).toEqual([1]);
-    expect(resource.store.getState()).toMatchObject({
+    expect(resource.cell.value).toMatchObject({
       data: "page:1",
       loading: false,
       status: "success",
@@ -224,7 +224,7 @@ describe("createResource", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(resource.store.getState()).toMatchObject({
+    expect(resource.cell.value).toMatchObject({
       data: "ready",
       loading: false,
       status: "success",

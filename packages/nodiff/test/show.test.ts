@@ -1,6 +1,7 @@
+import { Sheet } from "@okcontract/cells";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { jsx, mount } from "../src/dom";
-import { createCellStore, Show } from "../src/store";
+import { Show } from "../src/store";
 import { installDom } from "./test-dom";
 
 type SessionState = {
@@ -22,7 +23,7 @@ describe("Show", () => {
   });
 
   test("renders fallback for falsy values and children for truthy values", () => {
-    const session = createCellStore<SessionState>(() => ({ user: null, version: 1 }));
+    const session = new Sheet(Object.is).new<SessionState>({ user: null, version: 1 });
 
     const unmount = mount(
       "#app",
@@ -36,17 +37,17 @@ describe("Show", () => {
 
     expect(document.querySelector("#app")?.textContent).toBe("Guest:1:true");
 
-    session.setState({ user: { name: "Ada" }, version: 2 });
+    session.set({ user: { name: "Ada" }, version: 2 });
     expect(document.querySelector("#app")?.textContent).toBe("Ada:2");
 
-    session.setState({ user: null, version: 3 });
+    session.set({ user: null, version: 3 });
     expect(document.querySelector("#app")?.textContent).toBe("Guest:3:true");
 
     unmount();
   });
 
   test("accepts static child and fallback nodes", () => {
-    const store = createCellStore<{ enabled: boolean }>(() => ({ enabled: true }));
+    const store = new Sheet(Object.is).new<{ enabled: boolean }>({ enabled: true });
 
     const unmount = mount(
       "#app",
@@ -60,14 +61,14 @@ describe("Show", () => {
 
     expect(document.querySelector("#app")?.textContent).toBe("On");
 
-    store.setState({ enabled: false });
+    store.set({ enabled: false });
     expect(document.querySelector("#app")?.textContent).toBe("Off");
 
     unmount();
   });
 
   test("cleans replaced branches and unsubscribes on unmount", () => {
-    const store = createCellStore<{ enabled: boolean }>(() => ({ enabled: true }));
+    const store = new Sheet(Object.is).new<{ enabled: boolean }>({ enabled: true });
     let cleanups = 0;
 
     const unmount = mount(
@@ -92,23 +93,23 @@ describe("Show", () => {
       }),
     );
 
-    store.setState({ enabled: false });
+    store.set({ enabled: false });
     expect(cleanups).toBe(1);
     expect(document.querySelector("#app")?.textContent).toBe("Off");
 
     unmount();
     expect(cleanups).toBe(2);
 
-    store.setState({ enabled: true });
+    store.set({ enabled: true });
     expect(document.querySelector("#app")?.textContent).toBe("");
     expect(cleanups).toBe(2);
   });
 
   test("honors equality for selected values", () => {
-    const store = createCellStore<{ count: number; label: string }>(() => ({
+    const store = new Sheet(Object.is).new<{ count: number; label: string }>({
       count: 1,
       label: "one",
-    }));
+    });
     let renders = 0;
 
     const unmount = mount(
@@ -127,11 +128,11 @@ describe("Show", () => {
     expect(document.querySelector("#app")?.textContent).toBe("1:one");
     expect(renders).toBe(1);
 
-    store.setState({ count: 3, label: "three" });
+    store.set({ count: 3, label: "three" });
     expect(document.querySelector("#app")?.textContent).toBe("1:one");
     expect(renders).toBe(1);
 
-    store.setState({ count: 4, label: "four" });
+    store.set({ count: 4, label: "four" });
     expect(document.querySelector("#app")?.textContent).toBe("4:four");
     expect(renders).toBe(2);
 

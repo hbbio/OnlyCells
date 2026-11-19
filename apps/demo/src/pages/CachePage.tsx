@@ -1,10 +1,25 @@
 import { view } from "@nodiffjs/core";
 import { component } from "../cells";
 import { PageHeader, SectionTitle, StatusMetric } from "../components";
-import { apiCache, appCache, auth } from "../state";
+import { httpCachePrefix, session } from "../state";
 
 function readInventory() {
-  return { keys: appCache.keys().sort(), httpCount: apiCache.keys().length };
+  try {
+    const keys = Object.keys(localStorage)
+      .filter((key) => key.startsWith("demo:"))
+      .sort();
+    return { keys, httpCount: keys.filter((key) => key.startsWith(httpCachePrefix)).length };
+  } catch {
+    return { keys: [], httpCount: 0 };
+  }
+}
+
+function removeEntry(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Storage may be unavailable.
+  }
 }
 
 const CacheActions = component("CacheActions", (_proxy, { refresh }: { refresh: () => void }) => {
@@ -14,12 +29,12 @@ const CacheActions = component("CacheActions", (_proxy, { refresh }: { refresh: 
       <button
         class="button-primary"
         onClick={() => {
-          appCache.clear();
-          auth.logout();
+          for (const key of readInventory().keys) removeEntry(key);
+          session.value?.clear();
           refresh();
         }}
       >
-        Clear demo cache
+        Clear demo storage
       </button>
     </div>
   );
@@ -51,26 +66,26 @@ export const CachePage = component("CachePage", (proxy) => {
         />
       </section>
 
-      <SectionTitle title="Demo-prefixed keys">
-        Remove individual entries to watch the app recover from parsed defaults or a fresh request.
+      <SectionTitle title="Demo storage keys">
+        Removing saved preferences restores the defaults on the next load.
       </SectionTitle>
 
       {view(
         inventory,
         (state) => state.keys,
         (keys) => {
-          if (keys.length === 0) return <p class="notice">No demo cache keys.</p>;
+          if (keys.length === 0) return <p class="notice">No saved demo entries.</p>;
 
           return (
             <section class="panel">
               <ul class="cache-keys">
                 {keys.map((key) => (
                   <li>
-                    <code>demo:{key}</code>
+                    <code>{key}</code>
                     <button
                       class="button-quiet"
                       onClick={() => {
-                        appCache.remove(key);
+                        removeEntry(key);
                         refresh();
                       }}
                     >

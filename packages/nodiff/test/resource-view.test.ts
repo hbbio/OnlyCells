@@ -1,7 +1,8 @@
+import { Sheet } from "@okcontract/cells";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { jsx, mount } from "../src/dom";
 import { createResource, type ResourceState } from "../src/resource";
-import { createCellStore, Await, ResourceView } from "../src/store";
+import { Await, ResourceView } from "../src/store";
 import { installDom } from "./test-dom";
 
 type User = {
@@ -35,7 +36,7 @@ describe("ResourceView", () => {
   });
 
   test("renders empty, pending, success, stale data, and error branches", () => {
-    const resource = createCellStore<ResourceState<User>>(() => state());
+    const resource = new Sheet(Object.is).new(state());
     const errors: string[] = [];
 
     const unmount = mount(
@@ -54,20 +55,19 @@ describe("ResourceView", () => {
 
     expect(document.querySelector("#app")?.textContent).toBe("Empty:idle");
 
-    resource.setState(state({ status: "loading", loading: true }), true);
+    resource.set(state({ status: "loading", loading: true }));
     expect(document.querySelector("#app")?.textContent).toBe("Pending:loading");
 
-    resource.setState(
+    resource.set(
       state({
         status: "success",
         data: { id: 1, name: "Ada" },
         updatedAt: Date.now(),
       }),
-      true,
     );
     expect(document.querySelector("#app")?.textContent).toBe("User:Ada:false:false");
 
-    resource.setState(
+    resource.set(
       state({
         status: "success",
         data: { id: 1, name: "Ada" },
@@ -75,16 +75,14 @@ describe("ResourceView", () => {
         stale: true,
         updatedAt: Date.now(),
       }),
-      true,
     );
     expect(document.querySelector("#app")?.textContent).toBe("User:Ada:true:true");
 
-    resource.setState(
+    resource.set(
       state({
         status: "error",
         error: new Error("Denied"),
       }),
-      true,
     );
     expect(document.querySelector("#app")?.textContent).toBe("Error:Denied");
     expect(errors).toEqual(["Denied:error"]);
@@ -92,7 +90,7 @@ describe("ResourceView", () => {
     unmount();
   });
 
-  test("accepts createResource objects and the Await alias", () => {
+  test("passes a resource Cell to the Await alias", () => {
     const resource = createResource<User>({
       initialData: { id: 1, name: "Ada" },
       load: async () => ({ id: 2, name: "Grace" }),
@@ -101,7 +99,7 @@ describe("ResourceView", () => {
     const unmount = mount(
       "#app",
       Await({
-        resource,
+        resource: resource.cell,
         children: (user) => jsx("span", { children: user.name }),
       }),
     );
@@ -115,9 +113,7 @@ describe("ResourceView", () => {
   });
 
   test("cleans replaced branches and unsubscribes on unmount", () => {
-    const resource = createCellStore<ResourceState<User>>(() =>
-      state({ status: "loading", loading: true }),
-    );
+    const resource = new Sheet(Object.is).new(state({ status: "loading", loading: true }));
     let cleanups = 0;
 
     const unmount = mount(
@@ -148,23 +144,21 @@ describe("ResourceView", () => {
       }),
     );
 
-    resource.setState(
+    resource.set(
       state({
         status: "success",
         data: { id: 1, name: "Ada" },
       }),
-      true,
     );
 
     expect(cleanups).toBe(1);
     expect(document.querySelector("#app")?.textContent).toBe("Ada");
 
-    resource.setState(
+    resource.set(
       state({
         status: "error",
         error: new Error("Nope"),
       }),
-      true,
     );
 
     expect(cleanups).toBe(2);
@@ -173,19 +167,18 @@ describe("ResourceView", () => {
     unmount();
     expect(cleanups).toBe(3);
 
-    resource.setState(
+    resource.set(
       state({
         status: "success",
         data: { id: 2, name: "Grace" },
       }),
-      true,
     );
     expect(document.querySelector("#app")?.textContent).toBe("");
     expect(cleanups).toBe(3);
   });
 
   test("honors equality for whole resource states", () => {
-    const resource = createCellStore<ResourceState<User>>(() =>
+    const resource = new Sheet(Object.is).new(
       state({
         status: "success",
         data: { id: 1, name: "Ada" },
@@ -208,23 +201,21 @@ describe("ResourceView", () => {
     expect(document.querySelector("#app")?.textContent).toBe("Ada");
     expect(renders).toBe(1);
 
-    resource.setState(
+    resource.set(
       state({
         status: "success",
         data: { id: 1, name: "Ada changed" },
       }),
-      true,
     );
     expect(document.querySelector("#app")?.textContent).toBe("Ada");
     expect(renders).toBe(1);
 
-    resource.setState(
+    resource.set(
       state({
         status: "success",
         data: { id: 1, name: "Ada changed" },
         updatedAt: Date.now(),
       }),
-      true,
     );
     expect(document.querySelector("#app")?.textContent).toBe("Ada changed");
     expect(renders).toBe(2);

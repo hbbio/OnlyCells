@@ -1,4 +1,5 @@
-import { createCellStore, type CellStore, type WritableCell } from "./store.ts";
+import type { ValueCell } from "@okcontract/cells";
+import { type ControllerOptions, createControllerCell, patchCell, readCell } from "./state.ts";
 
 export type ResourceStatus = "idle" | "loading" | "success" | "error";
 
@@ -15,9 +16,8 @@ export type ResourceContext = {
   signal: AbortSignal;
 };
 
-type ResourceOptionsBase<T> = {
+type ResourceOptionsBase<T> = ControllerOptions<ResourceState<T>> & {
   initialData?: T | null;
-  cell?: WritableCell<ResourceState<T>>;
 };
 
 type OptionalArgsResourceOptions<T, TArgs> = ResourceOptionsBase<T> & {
@@ -48,7 +48,7 @@ type ResourceLoad<T, TArgs> = [undefined] extends [TArgs]
   : (args: TArgs) => Promise<T | undefined>;
 
 export type Resource<T, TArgs = void> = {
-  store: CellStore<ResourceState<T>>;
+  cell: ValueCell<ResourceState<T>>;
   load: ResourceLoad<T, TArgs>;
   refresh(): Promise<T | undefined>;
   mutate(next: T | ((current: T | null) => T)): void;
@@ -59,22 +59,21 @@ export type Resource<T, TArgs = void> = {
 const hasOwn = (value: object, key: PropertyKey): boolean =>
   Object.prototype.hasOwnProperty.call(value, key);
 
-export function createResource<T>(options: ResourceOptions<T, void>): Resource<T, void>;
-export function createResource<T, TArgs>(options: ResourceOptions<T, TArgs>): Resource<T, TArgs>;
 export function createResource<T, TArgs = void>(
   options: ResourceOptions<T, TArgs>,
 ): Resource<T, TArgs> {
   const initialData = options.initialData ?? null;
-  const store = createCellStore<ResourceState<T>>(
-    () => ({
+  const cell = createControllerCell<ResourceState<T>>(
+    {
       status: initialData === null ? "idle" : "success",
       data: initialData,
       error: null,
       updatedAt: initialData === null ? null : Date.now(),
       loading: false,
       stale: false,
-    }),
-    options.cell,
+    },
+    options,
+    "resource",
   );
 
   const hasInitialArgs = hasOwn(options, "initialArgs");
@@ -95,8 +94,9 @@ export function createResource<T, TArgs = void>(
 
   function finishAbort(requestController: AbortController): void {
     if (controller === requestController) controller = null;
-    const current = store.getState();
-    store.setState({
+    const current = readCell(cell);
+    cell.set({
+      ...current,
       status: current.data === null ? "idle" : "success",
       loading: false,
       stale: false,
@@ -111,8 +111,9 @@ export function createResource<T, TArgs = void>(
     const requestController = new AbortController();
     controller = requestController;
 
-    const current = store.getState();
-    store.setState({
+    const current = readCell(cell);
+    cell.set({
+      ...current,
       status: current.data === null ? "loading" : "success",
       loading: true,
       stale: current.data !== null,
@@ -123,7 +124,7 @@ export function createResource<T, TArgs = void>(
       const data = await options.load(lastArgs as TArgs, { signal: requestController.signal });
       if (currentRequestId !== requestId || requestController.signal.aborted) return undefined;
       if (controller === requestController) controller = null;
-      store.setState({
+      patchCell(cell, {
         status: "success",
         data,
         error: null,
@@ -139,11 +140,13 @@ export function createResource<T, TArgs = void>(
         return undefined;
       }
       if (controller === requestController) controller = null;
-      store.setState({
+      const current = readCell(cell);
+      cell.set({
+        ...current,
         status: "error",
         error: error instanceof Error ? error : new Error(String(error)),
         loading: false,
-        stale: store.getState().data !== null,
+        stale: current.data !== null,
       });
       return undefined;
     }
@@ -156,8 +159,8 @@ export function createResource<T, TArgs = void>(
 
   function mutate(next: T | ((current: T | null) => T)): void {
     const value =
-      typeof next === "function" ? (next as (current: T | null) => T)(store.getState().data) : next;
-    store.setState({
+      typeof next === "function" ? (next as (current: T | null) => T)(readCell(cell).data) : next;
+    patchCell(cell, {
       data: value,
       status: "success",
       updatedAt: Date.now(),
@@ -171,7 +174,7 @@ export function createResource<T, TArgs = void>(
     controller = null;
     lastArgs = initialArgs;
     hasLastArgs = hasInitialArgs;
-    store.setState({
+    patchCell(cell, {
       status: initialData === null ? "idle" : "success",
       data: initialData,
       error: null,
@@ -184,7 +187,7 @@ export function createResource<T, TArgs = void>(
   if (options.immediate) void load(lastArgs);
 
   return {
-    store,
+    cell,
     load: load as ResourceLoad<T, TArgs>,
     refresh,
     mutate,
