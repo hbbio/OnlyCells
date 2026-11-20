@@ -10,7 +10,7 @@ async function serveIndex() {
       headers: { "Content-Type": index.type, "Cache-Control": "no-store" },
     });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       return new Response(null, { status: 404 });
     }
     throw error;

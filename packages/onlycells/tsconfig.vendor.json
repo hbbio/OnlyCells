@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": [],
+    "strict": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "..",
+    "outDir": "dist/vendor",
+    "paths": {
+      "@okcontract/graph": ["../graph/src/index.ts"]
+    }
+  },
+  "files": ["../cells/src/index.ts"]
+}

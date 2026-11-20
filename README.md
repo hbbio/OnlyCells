@@ -1,6 +1,9 @@
 # OnlyCells
 
-OnlyCells is a small TypeScript runtime for browser apps that uses only system installs of bun + TypeScript, and [@okcontract/cells](https://github.com/okcontract/cells). TSX creates DOM nodes, and Cells update the text, properties, and regions that depend on them.
+OnlyCells is a small TypeScript runtime for browser apps. TSX creates DOM nodes, and Cells update
+the text, properties, and regions that depend on them. Build and test it with system Bun and
+TypeScript plus the pinned Cells and Graph source, with zero npm dependencies.
+[Cells](https://github.com/okcontract/cells) · [Graph](https://github.com/okcontract/graph)
 
 In the LLM era, you do not need a fat web framework for every browser app, especially when your project grows. You often want a lean runtime that lives in the same monorepo as your app and evolves with it.
 
@@ -14,12 +17,13 @@ Put Bun and the system TypeScript compiler (`tsc`) on your `PATH`. This checkout
 with Bun 1.4 and TypeScript 7.
 
 ```sh
-bun install --frozen-lockfile
+git submodule update --init
 bun run dev
 ```
 
-Open the local URL printed by Bun. The demo points its imports at `packages/onlycells/src` through
-TypeScript path aliases, so app and framework edits use the same dev server. [Demo TSX configuration](apps/demo/tsconfig.json)
+Open the local URL printed by Bun. The shared TypeScript paths resolve `@onlycells/core` to the
+framework source and `@okcontract/cells` to the vendored Cells build, without an install step.
+[Workspace paths](tsconfig.base.json)
 
 ## A counter in TSX
 
@@ -62,7 +66,7 @@ the rendered nodes and releases subscriptions if rendering throws. [Component he
 
 ## Cell bindings
 
-The lockfile uses Cells 0.4.0. `cell.map(fn)` derives a value from that Cell. With
+The repo pins the public Cells 0.4.0 source and Graph 0.2.0. `cell.map(fn)` derives a value from that Cell. With
 `proxy.map([cells], fn)`, each dependency is a Cell and the proxy owns the result. Capture fixed
 values in the callback.
 
@@ -320,9 +324,13 @@ bun run --cwd apps/demo preview
 ```
 
 `bun run check` typechecks both workspaces, checks formatting, and runs tests.
-`bun run security:check` also runs the dependency audit and production build.
+`bun run test` builds the vendored Cells runtime and runs the demo and core test suites.
+`bun run security:check` also runs the production build.
 
 GitHub Actions runs `bun run check` and `bun run build` on pull requests and pushes to `main`.
+The workflow checks out the Git submodule commits recorded by OnlyCells and verifies the Bun and
+TypeScript release archives against pinned SHA-256 digests. Review submodule updates with
+`git diff --submodule=log` and the upstream source diff.
 [CI workflow](.github/workflows/ci.yml)
 
 The build emits the core package into `packages/onlycells/dist` and the demo into `apps/demo/dist`.
@@ -333,5 +341,6 @@ load the latest assets. The repo targets ES2022 and the demo uses native CSS fea
 ## Publishing notes
 
 The core workspace is named `@onlycells/core`. It ships ESM, type declarations, source, and the
-JSX runtime entries. TypeScript rewrites the internal `.ts` imports to `.js` in the build. From
-`packages/onlycells`, run `bun pm pack --dry-run` to see what would ship. [Package README](packages/onlycells/README.md)
+JSX runtime entries. Outside the checkout, import Cells from `@onlycells/core/cells` to use the
+runtime bundled with the package. From `packages/onlycells`, run `bun pm pack --dry-run` to see
+what would ship. [Package README](packages/onlycells/README.md)

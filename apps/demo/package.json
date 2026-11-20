@@ -6,16 +6,9 @@
   "author": "Henri Binsztok",
   "type": "module",
   "scripts": {
-    "dev": "bun ./index.html --host=127.0.0.1",
-    "build": "bun ./build.ts",
+    "dev": "bun run --cwd ../../packages/onlycells build:vendor && bun ./index.html --host=127.0.0.1",
+    "build": "bun run --cwd ../../packages/onlycells build:vendor && bun ./build.ts",
     "preview": "bun ./preview.ts",
-    "typecheck": "tsc -p tsconfig.json"
-  },
-  "dependencies": {
-    "@onlycells/core": "workspace:*",
-    "@okcontract/cells": "^0.4.0"
-  },
-  "devDependencies": {
-    "@types/bun": "1.4.4"
+    "typecheck": "bun run --cwd ../../packages/onlycells build:vendor && tsc -p tsconfig.json"
   }
 }

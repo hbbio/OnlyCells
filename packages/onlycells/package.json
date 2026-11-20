@@ -21,6 +21,12 @@
   "sideEffects": false,
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "imports": {
+    "#okcontract/cells": {
+      "types": "./dist/vendor/cells/src/index.d.ts",
+      "default": "./dist/vendor/cells.js"
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -37,6 +43,10 @@
     "./cache": {
       "types": "./dist/cache.d.ts",
       "import": "./dist/cache.js"
+    },
+    "./cells": {
+      "types": "./dist/cells.d.ts",
+      "import": "./dist/cells.js"
     },
     "./csrf": {
       "types": "./dist/csrf.d.ts",
@@ -91,11 +101,9 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build:vendor": "tsc -p tsconfig.vendor.json && bun ./build-vendor.ts",
+    "build": "bun run build:vendor && tsc -p tsconfig.build.json && bun ./link-cells.ts",
     "prepack": "bun run build",
-    "typecheck": "tsc -p tsconfig.json"
-  },
-  "dependencies": {
-    "@okcontract/cells": "^0.4.0"
+    "typecheck": "bun run build:vendor && tsc -p tsconfig.json"
   }
 }

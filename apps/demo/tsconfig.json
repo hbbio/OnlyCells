@@ -2,14 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
-    "types": ["bun"],
     "jsx": "react-jsx",
-    "jsxImportSource": "@onlycells/core",
-    "paths": {
-      "@onlycells/core": ["../../packages/onlycells/src/index.ts"],
-      "@onlycells/core/jsx-runtime": ["../../packages/onlycells/src/jsx-runtime.ts"],
-      "@onlycells/core/jsx-dev-runtime": ["../../packages/onlycells/src/jsx-dev-runtime.ts"]
-    }
+    "jsxImportSource": "@onlycells/core"
   },
-  "include": ["src", "build.ts", "preview.ts"]
+  "include": ["src", "build.ts", "preview.ts", "../../types/tooling.d.ts"]
 }

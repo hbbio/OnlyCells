@@ -1,0 +1,6 @@
+[submodule "cells"]
+	path = packages/cells
+	url = https://github.com/okcontract/cells.git
+[submodule "graph"]
+	path = packages/graph
+	url = https://github.com/okcontract/graph.git

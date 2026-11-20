@@ -1,2 +1,5 @@
 [fmt]
 printWidth = 100
+
+[install]
+auto = "disable"

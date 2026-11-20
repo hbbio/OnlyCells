@@ -4,6 +4,7 @@
     "useDefineForClassFields": true,
     "module": "ESNext",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": [],
     "moduleResolution": "Bundler",
     "rewriteRelativeImportExtensions": true,
     "allowSyntheticDefaultImports": true,
@@ -14,6 +15,13 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "exactOptionalPropertyTypes": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "paths": {
+      "@okcontract/cells": ["./packages/onlycells/src/cells.ts"],
+      "@onlycells/core": ["./packages/onlycells/src/index.ts"],
+      "@onlycells/core/cells": ["./packages/onlycells/src/cells.ts"],
+      "@onlycells/core/jsx-runtime": ["./packages/onlycells/src/jsx-runtime.ts"],
+      "@onlycells/core/jsx-dev-runtime": ["./packages/onlycells/src/jsx-dev-runtime.ts"]
+    }
   }
 }

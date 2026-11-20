@@ -3,12 +3,7 @@
   "compilerOptions": {
     "noEmit": true,
     "jsx": "react-jsx",
-    "jsxImportSource": "@onlycells/core",
-    "paths": {
-      "@onlycells/core": ["./src/index.ts"],
-      "@onlycells/core/jsx-runtime": ["./src/jsx-runtime.ts"],
-      "@onlycells/core/jsx-dev-runtime": ["./src/jsx-dev-runtime.ts"]
-    }
+    "jsxImportSource": "@onlycells/core"
   },
-  "include": ["src", "test-types"]
+  "include": ["src", "test-types", "build-vendor.ts", "link-cells.ts", "../../types/tooling.d.ts"]
 }

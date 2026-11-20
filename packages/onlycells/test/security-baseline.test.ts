@@ -4,8 +4,12 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "bun:test";
 import { createSecurityPolicy, securityHeaders } from "../src/security";
 
-type RootPackage = {
+type PackageManifest = {
   scripts?: Record<string, string>;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
 };
 
 const root = fileURLToPath(new URL("../../..", import.meta.url));
@@ -14,26 +18,48 @@ function readRepoFile(path: string): string {
   return readFileSync(join(root, path), "utf8");
 }
 
-function rootPackage(): RootPackage {
-  return JSON.parse(readRepoFile("package.json")) as RootPackage;
+function readPackage(path: string): PackageManifest {
+  return JSON.parse(readRepoFile(path)) as PackageManifest;
 }
 
 describe("security baseline", () => {
-  test("keeps a one-command security check and committed lockfile", () => {
-    const securityCheck = rootPackage().scripts?.["security:check"];
-
-    expect(securityCheck).toContain("bun audit");
+  test("checks and builds with pinned submodules and zero registry dependencies", () => {
+    const securityCheck = readPackage("package.json").scripts?.["security:check"];
     expect(securityCheck).toContain("bun run check");
     expect(securityCheck).toContain("bun run build");
-    expect(existsSync(join(root, "bun.lock"))).toBe(true);
+
+    for (const path of [
+      "package.json",
+      "apps/demo/package.json",
+      "packages/onlycells/package.json",
+    ]) {
+      const { dependencies, devDependencies, optionalDependencies, peerDependencies } =
+        readPackage(path);
+      expect({
+        ...dependencies,
+        ...devDependencies,
+        ...optionalDependencies,
+        ...peerDependencies,
+      }).toEqual({});
+    }
+    expect(existsSync(join(root, "bun.lock"))).toBe(false);
+    const submodules = readRepoFile(".gitmodules");
+    expect(submodules).toContain("path = packages/cells");
+    expect(submodules).toContain("path = packages/graph");
+    expect(readRepoFile("bunfig.toml")).toContain('auto = "disable"');
+
+    const workflow = readRepoFile(".github/workflows/ci.yml");
+    expect(workflow).toMatch(/uses: actions\/checkout@[a-f0-9]{40}\b/);
+    expect(workflow).toContain("submodules: true");
+    expect(workflow).toContain("persist-credentials: false");
+    expect(workflow).not.toMatch(/\b(?:npm|bun) (?:install|add|audit)\b/);
   });
 
-  test("keeps dependency lockfiles tracked and local secrets ignored", () => {
+  test("keeps local secrets ignored", () => {
     const ignored = readRepoFile(".gitignore").split(/\r?\n/);
 
     expect(ignored).toContain(".env");
     expect(ignored).toContain(".env.*");
-    expect(ignored).not.toContain("bun.lock");
   });
 
   test("keeps the demo wired to strict security defaults", () => {

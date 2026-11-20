@@ -5,18 +5,18 @@
   "license": "MIT",
   "author": "Henri Binsztok",
   "workspaces": [
-    "packages/*",
-    "apps/*"
+    "packages/onlycells",
+    "apps/demo"
   ],
   "scripts": {
     "dev": "bun run --cwd apps/demo dev",
-    "build": "bun run --cwd packages/onlycells build && bun run --cwd apps/demo build",
-    "typecheck": "bun run --cwd packages/onlycells typecheck && bun run --cwd apps/demo typecheck",
-    "format": "bun fmt",
-    "format:check": "bun fmt --check",
-    "test": "bun test",
-    "check": "bun run typecheck && bun run format:check && bun run test",
-    "security:check": "bun audit && bun run check && bun run build"
+    "build": "bun run --cwd packages/onlycells build && bun run --cwd apps/demo ./build.ts",
+    "typecheck": "bun run --cwd packages/onlycells typecheck && tsc -p apps/demo/tsconfig.json",
+    "format": "bun fmt --ignore-pattern 'packages/cells/**' --ignore-pattern 'packages/graph/**'",
+    "format:check": "bun run format --check",
+    "test": "bun run --cwd packages/onlycells build:vendor && bun test ./packages/onlycells/test ./apps/demo/test",
+    "check": "bun run typecheck && bun run format:check && bun test ./packages/onlycells/test ./apps/demo/test",
+    "security:check": "bun run check && bun run build"
   },
   "packageManager": "bun@1.4.4"
 }

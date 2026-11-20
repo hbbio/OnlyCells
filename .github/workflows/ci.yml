@@ -10,21 +10,29 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          submodules: true
 
-      - uses: oven-sh/setup-bun@v2
-
-      - name: Install TypeScript
+      - name: Install verified Bun and TypeScript
         run: |
-          bun install --global typescript@7.0.2
-          bun pm bin --global >> "$GITHUB_PATH"
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+          tools="$RUNNER_TEMP/onlycells-tools"
+          mkdir -p "$tools"
+          cd "$tools"
+          curl --proto '=https' --retry 2 -fsSLo bun-linux-x64.zip \
+            https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-linux-x64.zip
+          curl --proto '=https' --retry 2 -fsSLo typescript-linux-x64.tgz \
+            https://github.com/microsoft/TypeScript/releases/download/v7.0.2/typescript-linux-x64.tgz
+          printf '%s\n' \
+            'bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c  bun-linux-x64.zip' \
+            '7ecad6f67377e831856367ab062ef394f21506a611405bf8ac0ff039348637d3  typescript-linux-x64.tgz' \
+            | sha256sum --check --strict
+          unzip -q bun-linux-x64.zip
+          tar -xzf typescript-linux-x64.tgz
+          printf '%s\n' "$tools/bun-linux-x64" "$tools/package/lib" >> "$GITHUB_PATH"
 
       - name: Check
         run: bun run check

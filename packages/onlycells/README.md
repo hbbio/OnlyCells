@@ -27,7 +27,7 @@ The strict setup uses `skipLibCheck` for the declarations shipped with Cells 0.4
 
 ```tsx
 import { mount } from "@onlycells/core";
-import { Sheet } from "@okcontract/cells";
+import { Sheet } from "@onlycells/core/cells";
 
 const clicks = new Sheet().new(0);
 
@@ -42,7 +42,7 @@ function Counter() {
 const unmount = mount("#app", Counter);
 ```
 
-The examples use Cells 0.4.0. Pass Cells to `bind.attr` and `bind.prop` for direct updates, or
+The package bundles the pinned Cells 0.4.0 and Graph 0.2.0 sources. Pass Cells to `bind.attr` and `bind.prop` for direct updates, or
 use selectors to read individual fields. Use a `SheetProxy` to group Cells created by a
 component and destroy the proxy during cleanup. Auth, resources, and the router expose their
 state as `cell`. Pass `sheet` to create it on a shared Sheet, or supply an existing `ValueCell`
@@ -63,9 +63,9 @@ The JSX transform uses `@onlycells/core/jsx-runtime` or `@onlycells/core/jsx-dev
 ## Build from source
 
 The demo imports the core source through TypeScript path aliases. From the repository root, run
-`bun install --frozen-lockfile` and `bun run dev` to edit and try both together.
+`git submodule update --init` and `bun run dev` to edit and try both together.
 
 Run `bun pm pack --dry-run` in `packages/onlycells` to check the package. The prepack script builds
 the ESM files and declarations in `dist`.
 
-The repository README covers the demo, API examples, and production preview. [OnlyCells README](https://github.com/hbbio/nodiff/blob/main/README.md)
+The repository README covers the demo, API examples, and production preview. [OnlyCells README](https://github.com/hbbio/OnlyCells/blob/main/README.md)
