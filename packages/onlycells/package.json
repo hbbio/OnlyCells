@@ -1,5 +1,5 @@
 {
-  "name": "@nodiffjs/core",
+  "name": "@onlycells/core",
   "version": "0.1.0",
   "description": "Direct DOM TSX runtime and small rich-client app helpers for fork-first TypeScript apps.",
   "keywords": [

@@ -1,4 +1,4 @@
-import { view } from "@nodiffjs/core";
+import { view } from "@onlycells/core";
 import { component } from "../cells";
 import { PageHeader, SectionTitle, StatusMetric } from "../components";
 import { httpCachePrefix, session } from "../state";

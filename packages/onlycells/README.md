@@ -1,6 +1,6 @@
-# @nodiffjs/core
+# @onlycells/core
 
-NoDiff turns TSX into DOM nodes. Cells can update individual text nodes, attributes, and
+OnlyCells turns TSX into DOM nodes. Cells can update individual text nodes, attributes, and
 properties. The package also includes bindings for forms, a router, and helpers for API requests,
 caching, and auth.
 
@@ -17,7 +17,7 @@ Use the automatic JSX transform in your app’s `tsconfig.json`.
     "strict": true,
     "skipLibCheck": true,
     "jsx": "react-jsx",
-    "jsxImportSource": "@nodiffjs/core"
+    "jsxImportSource": "@onlycells/core"
   }
 }
 ```
@@ -26,7 +26,7 @@ The strict setup uses `skipLibCheck` for the declarations shipped with Cells 0.4
 `<div id="app"></div>` to the page for the counter.
 
 ```tsx
-import { mount } from "@nodiffjs/core";
+import { mount } from "@onlycells/core";
 import { Sheet } from "@okcontract/cells";
 
 const clicks = new Sheet().new(0);
@@ -53,19 +53,19 @@ with the `cell` option.
 The package root exports the public API. Use a subpath when you only need a particular module.
 
 ```ts
-import { mount } from "@nodiffjs/core/dom";
-import { createApi } from "@nodiffjs/core/api";
-import { defineSchema, ValidationError } from "@nodiffjs/core/schema";
+import { mount } from "@onlycells/core/dom";
+import { createApi } from "@onlycells/core/api";
+import { defineSchema, ValidationError } from "@onlycells/core/schema";
 ```
 
-The JSX transform uses `@nodiffjs/core/jsx-runtime` or `@nodiffjs/core/jsx-dev-runtime`.
+The JSX transform uses `@onlycells/core/jsx-runtime` or `@onlycells/core/jsx-dev-runtime`.
 
 ## Build from source
 
 The demo imports the core source through TypeScript path aliases. From the repository root, run
 `bun install --frozen-lockfile` and `bun run dev` to edit and try both together.
 
-Run `bun pm pack --dry-run` in `packages/nodiff` to check the package. The prepack script builds
+Run `bun pm pack --dry-run` in `packages/onlycells` to check the package. The prepack script builds
 the ESM files and declarations in `dist`.
 
-The repository README covers the demo, API examples, and production preview. [NoDiff README](https://github.com/hbbio/nodiff/blob/main/README.md)
+The repository README covers the demo, API examples, and production preview. [OnlyCells README](https://github.com/hbbio/nodiff/blob/main/README.md)

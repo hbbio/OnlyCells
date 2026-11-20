@@ -1,5 +1,5 @@
 {
-  "name": "nodiff",
+  "name": "onlycells",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -10,8 +10,8 @@
   ],
   "scripts": {
     "dev": "bun run --cwd apps/demo dev",
-    "build": "bun run --cwd packages/nodiff build && bun run --cwd apps/demo build",
-    "typecheck": "bun run --cwd packages/nodiff typecheck && bun run --cwd apps/demo typecheck",
+    "build": "bun run --cwd packages/onlycells build && bun run --cwd apps/demo build",
+    "typecheck": "bun run --cwd packages/onlycells typecheck && bun run --cwd apps/demo typecheck",
     "format": "bun fmt",
     "format:check": "bun fmt --check",
     "test": "bun test",

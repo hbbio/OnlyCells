@@ -1,4 +1,4 @@
-import { type AuthToken, bind, cookieSessionRequest, Show, validatedSubmit } from "@nodiffjs/core";
+import { type AuthToken, bind, cookieSessionRequest, Show, validatedSubmit } from "@onlycells/core";
 import { component } from "../cells";
 import { PageHeader, SectionTitle, StatusMetric } from "../components";
 import { LoginSchema, type LoginValues } from "../schemas";

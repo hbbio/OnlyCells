@@ -1,4 +1,4 @@
-import { addCleanup, type Child, fragment, withRenderCleanup } from "@nodiffjs/core";
+import { addCleanup, type Child, fragment, withRenderCleanup } from "@onlycells/core";
 import { Sheet, SheetProxy } from "@okcontract/cells";
 
 export const sheet = new Sheet(Object.is);

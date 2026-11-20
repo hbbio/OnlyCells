@@ -5,14 +5,14 @@ import {
   createLocalCache,
   createResource,
   type SecurityViolation,
-} from "@nodiffjs/core";
+} from "@onlycells/core";
 import { sheet } from "./cells";
 import { PostsSchema } from "./schemas";
 
 const demoCsrfToken = crypto.randomUUID();
 
 function reportSecurityViolation(violation: SecurityViolation): void {
-  console.warn(`[nodiff security] ${violation.type}: ${violation.context ?? violation.message}`);
+  console.warn(`[onlycells security] ${violation.type}: ${violation.context ?? violation.message}`);
 }
 
 const securityPolicy = configureSecurityPolicy({

@@ -28,7 +28,7 @@ export type ErrorBoundaryProps =
     });
 
 type EventPair = [EventListenerOrEventListenerObject, AddEventListenerOptions?];
-const trustedHTMLMarker = Symbol("nodiff:trustedHTML");
+const trustedHTMLMarker = Symbol("onlycells:trustedHTML");
 
 export type TrustedHTML = {
   readonly [trustedHTMLMarker]: true;

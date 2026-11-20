@@ -95,7 +95,7 @@ function normalizePath(path: string): string {
 }
 
 function parsePath(path: string): { pathname: string; query: URLSearchParams } {
-  const url = new URL(normalizePath(path), "http://nodiff.local");
+  const url = new URL(normalizePath(path), "http://onlycells.local");
   return { pathname: url.pathname || "/", query: url.searchParams };
 }
 

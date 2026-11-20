@@ -93,9 +93,9 @@ describe("SecurityPolicy", () => {
     expect(contentSecurityPolicy({ reportUri: "/csp-report" })).toContain("report-uri /csp-report");
     expect(
       contentSecurityPolicy({
-        reportUri: "https://reports.example.test/csp/path?app=nodiff",
+        reportUri: "https://reports.example.test/csp/path?app=onlycells",
       }),
-    ).toContain("report-uri https://reports.example.test/csp/path?app=nodiff");
+    ).toContain("report-uri https://reports.example.test/csp/path?app=onlycells");
   });
 
   test("rejects invalid CSP source input", () => {

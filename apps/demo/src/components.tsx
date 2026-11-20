@@ -1,4 +1,4 @@
-import { bind, type Action, type Child } from "@nodiffjs/core";
+import { bind, type Action, type Child } from "@onlycells/core";
 import { component } from "./cells";
 import { count, step, theme, type Theme, themeOptions } from "./preferences";
 

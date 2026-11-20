@@ -1,4 +1,4 @@
-import { defineSchema, ValidationError, type ValidationIssue } from "@nodiffjs/core";
+import { defineSchema, ValidationError, type ValidationIssue } from "@onlycells/core";
 
 export type Post = { userId: number; id: number; title: string; body: string };
 export type LoginValues = { email: string; password: string };

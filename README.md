@@ -1,36 +1,33 @@
-# NoDiff
+# OnlyCells
 
-NoDiff is a small TypeScript runtime for browser apps. TSX creates DOM nodes, and Cells update the
-text, properties, and regions that depend on them. The package also includes a fetch client,
-schema validation, forms, auth, and routing.
+OnlyCells is a small TypeScript runtime for browser apps that uses only [@okcontract/cells](https://github.com/okcontract/cells). TSX creates DOM nodes, and Cells update the text, properties, and regions that depend on them.
 
 In the LLM era, you do not need a fat web framework for every browser app, especially when your project grows. You often want a lean runtime that lives in the same monorepo as your app and evolves with it.
 
 That shape is easier for people and coding agents to integrate, inspect, change, and reason about. Fewer hidden layers means fewer bugs, faster feedback, and less time spent reverse-engineering framework behavior.
 
-NoDiff is a work in progress, built with LLM assistance. Fork the repo to edit the framework and
-the demo in the same checkout.
+Fork the repo to edit the framework and the demo in the same checkout.
 
 ## Run it
 
 Put Bun and the system TypeScript compiler (`tsc`) on your `PATH`. This checkout has been tested
-with Bun 1.4.4 and TypeScript 7.0.2.
+with Bun 1.4 and TypeScript 7.
 
 ```sh
 bun install --frozen-lockfile
 bun run dev
 ```
 
-Open the local URL printed by Bun. The demo points its imports at `packages/nodiff/src` through
+Open the local URL printed by Bun. The demo points its imports at `packages/onlycells/src` through
 TypeScript path aliases, so app and framework edits use the same dev server. [Demo TSX configuration](apps/demo/tsconfig.json)
 
 ## A counter in TSX
 
 Add a host such as `<div id="app"></div>` to your HTML. For a new app, set
-`jsxImportSource` to `@nodiffjs/core` and use the automatic JSX transform. [TSX setup](packages/nodiff/README.md#tsx-setup)
+`jsxImportSource` to `@onlycells/core` and use the automatic JSX transform. [TSX setup](packages/onlycells/README.md#tsx-setup)
 
 ```tsx
-import { mount } from "@nodiffjs/core";
+import { mount } from "@onlycells/core";
 import { Sheet } from "@okcontract/cells";
 
 const sheet = new Sheet();
@@ -84,7 +81,7 @@ call site.
 Use `bind.prop("value", selectedTheme)` to keep a select in sync with a Cell. `bind.attr(name, cell)`
 works the same way for attributes. Both also accept a selector, and `bind.props` updates several
 properties, classes, or attributes together. Bindings read from initialized Cells. Two-way
-bindings write to a `ValueCell`. [Binding signatures](packages/nodiff/src/store.ts)
+bindings write to a `ValueCell`. [Binding signatures](packages/onlycells/src/store.ts)
 
 ### Form controls and actions
 
@@ -93,7 +90,7 @@ cleanup function for a listener, subscription, or observer. This is also how `bi
 an input to a field.
 
 ```tsx
-import { bind } from "@nodiffjs/core";
+import { bind } from "@onlycells/core";
 import { Sheet } from "@okcontract/cells";
 
 const preferences = new Sheet().new({ search: "", page: 1 });
@@ -113,8 +110,8 @@ const searchInput = (
 
 Two-way bindings merge plain record patches and replace other values, including arrays. The
 `bind` object also covers numbers, checked inputs, radio groups, selects, and files. Use `effect`
-when an element should own a side effect, and `removeNode` when removing a node with NoDiff
-subscriptions yourself. [Lifecycle helpers](packages/nodiff/src/lifecycle.ts)
+when an element should own a side effect, and `removeNode` when removing a node with OnlyCells
+subscriptions yourself. [Lifecycle helpers](packages/onlycells/src/lifecycle.ts)
 
 ### Conditional content and lists
 
@@ -155,7 +152,7 @@ and messages.
 This example uses the demo’s `PostsSchema`. [Demo schemas](apps/demo/src/schemas.ts)
 
 ```ts
-import { createApi, createLocalCache } from "@nodiffjs/core";
+import { createApi, createLocalCache } from "@onlycells/core";
 import { PostsSchema } from "./schemas";
 
 const cache = createLocalCache("demo:http:");
@@ -175,7 +172,7 @@ to remove a group of entries.
 
 The client also supports query parameters, request headers, abort signals, and timeouts.
 `api.get`, `post`, `put`, `patch`, and `delete` delegate to `api.request`. Failed HTTP responses
-throw `ApiError` after any configured auth retry. [API and request options](packages/nodiff/src/api.ts) · [Cache methods](packages/nodiff/src/cache.ts)
+throw `ApiError` after any configured auth retry. [API and request options](packages/onlycells/src/api.ts) · [Cache methods](packages/onlycells/src/cache.ts)
 
 ## Resources
 
@@ -207,7 +204,7 @@ const feedRegion = (
 `ResourceView` keeps showing available data during a refresh. It uses the pending, error, and empty
 slots when data is unavailable. Call `refresh()` to reuse the most recent `load()` arguments or
 `initialArgs` before the first load. With neither available, `refresh()` resolves to `undefined`.
-Supply `initialArgs` when an immediate loader requires arguments. [Resource options](packages/nodiff/src/resource.ts) · [Demo resource](apps/demo/src/state.ts)
+Supply `initialArgs` when an immediate loader requires arguments. [Resource options](packages/onlycells/src/resource.ts) · [Demo resource](apps/demo/src/state.ts)
 
 ## Auth
 
@@ -234,7 +231,7 @@ and an optional `storageKey`. Saving refresh tokens takes the separate
 
 Pass `{ sheet }` to auth, resources, or the router to create their state on your shared Sheet.
 Use the returned `cell` in bindings or maps, such as `proxy.map([auth.cell], ({ user }) => user)`.
-The `cell` option lets you supply an existing `ValueCell`. [Auth controller](packages/nodiff/src/auth.ts) · [Demo state](apps/demo/src/state.ts)
+The `cell` option lets you supply an existing `ValueCell`. [Auth controller](packages/onlycells/src/auth.ts) · [Demo state](apps/demo/src/state.ts)
 
 ## Router
 
@@ -243,7 +240,7 @@ Route components receive params, query values, and the router. Call `router.star
 to tie the navigation listeners to a mounted element.
 
 ```tsx
-import { createRouter, mount } from "@nodiffjs/core";
+import { createRouter, mount } from "@onlycells/core";
 
 const router = createRouter(
   [
@@ -270,7 +267,7 @@ mount("#app", () => (
 ```
 
 Use `router.navigate(to, { replace: true })` for programmatic navigation. If you choose history
-mode, configure the server to return `index.html` for app routes. [Router options](packages/nodiff/src/router.ts) · [Demo routes](apps/demo/src/app.tsx)
+mode, configure the server to return `index.html` for app routes. [Router options](packages/onlycells/src/router.ts) · [Demo routes](apps/demo/src/app.tsx)
 
 ## Forms
 
@@ -293,7 +290,7 @@ Parse numbers in the schema, since ordinary input values arrive as strings.
 ```
 
 Set `resetOnSuccess` to clear the form after the handler finishes. The action also accepts a
-`csrf` option for forms that send a token. [Form options](packages/nodiff/src/forms.ts) · [Demo login](apps/demo/src/pages/AuthPage.tsx)
+`csrf` option for forms that send a token. [Form options](packages/onlycells/src/forms.ts) · [Demo login](apps/demo/src/pages/AuthPage.tsx)
 
 ## Security defaults
 
@@ -301,11 +298,11 @@ Set `resetOnSuccess` to clear the form after the handler finishes. The action al
   through `unsafeHTML` with `sanitizeHTML(...)` or caller-reviewed `trustedHTML(...)`.
 - JSX and bindings share checks for raw HTML, URLs, styles, and inline event attributes.
   `DOM_SINK_POLICY` lists the blocked tags and the names those checks cover.
-  [DOM rules](packages/nodiff/src/dom.ts)
+  [DOM rules](packages/onlycells/src/dom.ts)
 - The default policy is permissive about origins and checks URL schemes. Use
   `configureSecurityPolicy` for strict origin checks, HTTPS requirements on API requests, cache
   rules, CSRF, and violation reporting. Strict API clients need a `baseUrl` and a response schema
-  for cached requests. [Security policy](packages/nodiff/src/security.ts)
+  for cached requests. [Security policy](packages/onlycells/src/security.ts)
 - `catchRender({ render: App })` catches errors while the callback runs. It and the router show
   redacted errors by default, with hooks for reporting and a custom fallback.
 
@@ -328,13 +325,13 @@ bun run --cwd apps/demo preview
 GitHub Actions runs `bun run check` and `bun run build` on pull requests and pushes to `main`.
 [CI workflow](.github/workflows/ci.yml)
 
-The build emits the core package into `packages/nodiff/dist` and the demo into `apps/demo/dist`.
+The build emits the core package into `packages/onlycells/dist` and the demo into `apps/demo/dist`.
 Preview serves the demo on `http://127.0.0.1:4173` by default. Refresh the page after a rebuild to
 load the latest assets. The repo targets ES2022 and the demo uses native CSS features such as
 `light-dark()`. [TypeScript settings](tsconfig.base.json)
 
 ## Publishing notes
 
-The core workspace is named `@nodiffjs/core`. It ships ESM, type declarations, source, and the
+The core workspace is named `@onlycells/core`. It ships ESM, type declarations, source, and the
 JSX runtime entries. TypeScript rewrites the internal `.ts` imports to `.js` in the build. From
-`packages/nodiff`, run `bun pm pack --dry-run` to see what would ship. [Package README](packages/nodiff/README.md)
+`packages/onlycells`, run `bun pm pack --dry-run` to see what would ship. [Package README](packages/onlycells/README.md)

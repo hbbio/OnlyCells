@@ -7,7 +7,7 @@ import {
   text,
   view,
   when,
-} from "@nodiffjs/core";
+} from "@onlycells/core";
 import type { AnyCell } from "@okcontract/cells";
 import { component } from "../cells";
 import { Badge, PageHeader, SectionTitle } from "../components";

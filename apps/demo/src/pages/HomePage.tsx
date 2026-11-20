@@ -1,4 +1,4 @@
-import { bind } from "@nodiffjs/core";
+import { bind } from "@onlycells/core";
 import { component } from "../cells";
 import {
   CounterCard,

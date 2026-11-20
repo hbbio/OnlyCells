@@ -1,4 +1,4 @@
-import { bind, createRouter, type LinkProps } from "@nodiffjs/core";
+import { bind, createRouter, type LinkProps } from "@onlycells/core";
 import { component, sheet } from "./cells";
 import { AuthPage } from "./pages/AuthPage";
 import { CachePage } from "./pages/CachePage";
@@ -26,10 +26,10 @@ const RouteError = component("RouteError", () => {
 
 export const router = createRouter(
   [
-    { path: "/", title: "NoDiff", component: HomePage },
-    { path: "/posts", title: "Posts | NoDiff", component: PostsPage },
-    { path: "/auth", title: "Auth | NoDiff", component: AuthPage },
-    { path: "/cache", title: "Cache | NoDiff", component: CachePage },
+    { path: "/", title: "OnlyCells", component: HomePage },
+    { path: "/posts", title: "Posts | OnlyCells", component: PostsPage },
+    { path: "/auth", title: "Auth | OnlyCells", component: AuthPage },
+    { path: "/cache", title: "Cache | OnlyCells", component: CachePage },
   ],
   {
     mode: "hash",
@@ -72,15 +72,15 @@ export const App = component("App", (proxy) => {
             />
           </svg>
         </label>
-        <strong>NoDiff</strong>
+        <strong>OnlyCells</strong>
       </header>
       <label for="app-drawer" class="sidebar-overlay" aria-hidden="true" />
       <aside class="sidebar" id="app-sidebar">
         <Link class="brand" to="/">
           <span class="brand-mark" aria-hidden="true">
-            no
+            OC
           </span>
-          NoDiff
+          OnlyCells
         </Link>
         <nav aria-label="Main navigation">
           <ul class="nav-list">

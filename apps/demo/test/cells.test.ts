@@ -1,7 +1,7 @@
-import { cleanupNode, jsx, type mount, text } from "@nodiffjs/core";
+import { cleanupNode, jsx, type mount, text } from "@onlycells/core";
 import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
-import { installDom } from "../../../packages/nodiff/test/test-dom";
+import { installDom } from "../../../packages/onlycells/test/test-dom";
 import { component, sheet } from "../src/cells";
 
 test("releases nested cells and shared-cell bindings when a component render fails", async () => {
@@ -75,7 +75,7 @@ test("uses shared app cells and frees component cells on route changes and unmou
             build.onLoad({ filter: /\/src\/app\.tsx$/ }, async ({ path }) => ({
               loader: "tsx",
               contents: `${await Bun.file(path).text()}
-export { mount } from "@nodiffjs/core";
+export { mount } from "@onlycells/core";
 export { posts, session } from "./state";
 export { count, step, theme, postFilters } from "./preferences";`,
             }));

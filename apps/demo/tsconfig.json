@@ -4,11 +4,11 @@
     "noEmit": true,
     "types": ["bun"],
     "jsx": "react-jsx",
-    "jsxImportSource": "@nodiffjs/core",
+    "jsxImportSource": "@onlycells/core",
     "paths": {
-      "@nodiffjs/core": ["../../packages/nodiff/src/index.ts"],
-      "@nodiffjs/core/jsx-runtime": ["../../packages/nodiff/src/jsx-runtime.ts"],
-      "@nodiffjs/core/jsx-dev-runtime": ["../../packages/nodiff/src/jsx-dev-runtime.ts"]
+      "@onlycells/core": ["../../packages/onlycells/src/index.ts"],
+      "@onlycells/core/jsx-runtime": ["../../packages/onlycells/src/jsx-runtime.ts"],
+      "@onlycells/core/jsx-dev-runtime": ["../../packages/onlycells/src/jsx-dev-runtime.ts"]
     }
   },
   "include": ["src", "build.ts", "preview.ts"]
