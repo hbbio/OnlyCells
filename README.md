@@ -1,6 +1,6 @@
 # OnlyCells
 
-OnlyCells is a small TypeScript runtime for browser apps that uses only [@okcontract/cells](https://github.com/okcontract/cells). TSX creates DOM nodes, and Cells update the text, properties, and regions that depend on them.
+OnlyCells is a small TypeScript runtime for browser apps that uses only system installs of bun + TypeScript, and [@okcontract/cells](https://github.com/okcontract/cells). TSX creates DOM nodes, and Cells update the text, properties, and regions that depend on them.
 
 In the LLM era, you do not need a fat web framework for every browser app, especially when your project grows. You often want a lean runtime that lives in the same monorepo as your app and evolves with it.
 
